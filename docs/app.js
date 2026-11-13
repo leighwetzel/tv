@@ -264,7 +264,7 @@ async function viewFeed() {
     if (!cards.has(r.title_id)) cards.set(r.title_id, { title: r.titles, reviews: [], started: false });
     const c = cards.get(r.title_id);
     c.reviews.push(r);
-    if (!isMe(r.user_id) && POSITIVE.includes(r.rating)) c.started = true;
+    if (POSITIVE.includes(r.rating)) c.started = true;
   }
   let list = [...cards.values()].filter((c) => c.started);
   if (state.feedType !== 'all') list = list.filter((c) => c.title.media_type === state.feedType);
@@ -289,6 +289,7 @@ actions.seg = (d) => { state[d.key] = d.val; route(); };
 
 function feedCard(c, saved) {
   const t = c.title, shown = c.reviews.slice(0, 2), more = c.reviews.length - shown.length;
+  const mine = c.reviews.find((r) => isMe(r.user_id));
   return `<article class="card pick">
     <a href="${titleLink(t)}">${poster(t.poster_path)}</a>
     <div class="pick-body">
@@ -297,9 +298,11 @@ function feedCard(c, saved) {
       ${watchOn(t.id)}
       ${shown.map((r) => reviewHtml(r, true)).join('')}
       ${more > 0 ? `<a class="small" href="${titleLink(t)}">+${more} more</a>` : ''}
-      <div class="row" style="margin-top:4px">
-        ${saved.has(t.id) ? '<span class="muted">On your list</span>'
-          : `<button class="primary" data-act="save" data-id="${esc(t.id)}">+ Want to watch</button>`}
+      <div class="row actions" style="margin-top:4px">
+        ${mine ? `<span class="muted">You: <strong>${RATING[mine.rating]}</strong></span> <a class="small" href="${titleLink(t)}">Edit</a>`
+          : `${saved.has(t.id) ? '<span class="muted">On your list</span>'
+              : `<button class="primary" data-act="save" data-id="${esc(t.id)}">+ Want to watch</button>`}
+             <button data-act="seenIt" data-id="${esc(t.id)}">Seen it</button>`}
       </div>
     </div></article>`;
 }
@@ -311,6 +314,12 @@ function reviewHtml(r, withThanks) {
     ${r.note ? `<div class="note">“${esc(r.note)}”</div>` : ''}</div>`;
 }
 
+actions.seenIt = (d, el) => {
+  const box = el.closest('.actions');
+  box.outerHTML = `<div class="field" style="margin-top:6px;width:100%">${ratingForm(null, d.id).replace('<form ', '<form data-after="#/feed" ')}
+    <button class="link" type="button" data-act="cancelSeen">Cancel</button></div>`;
+};
+actions.cancelSeen = () => route();
 actions.save = async (d, el) => {
   el.disabled = true;
   const { data: rs } = await sb.from('ratings').select('user_id, rating').eq('title_id', d.id);
@@ -404,7 +413,7 @@ actions.saveRating = async (d, el) => {
   if (error) { el.disabled = false; throw error; }
   await sb.from('watchlist').update({ watched_at: new Date().toISOString() }).eq('title_id', titleId).is('watched_at', null);
   toast('Saved');
-  if (form.dataset.after) location.hash = form.dataset.after; else route();
+  if (form.dataset.after && form.dataset.after !== location.hash) location.hash = form.dataset.after; else route();
 };
 
 // ---------------------------------------------------------------- add
@@ -582,15 +591,16 @@ actions.watched = async (d) => {
 async function viewMe() {
   await loadPeople();
   if (!state.services) state.services = (await fn('services')).services;
-  const [{ data: acts }, { count: nRatings }, { data: conns }] = await Promise.all([
+  const [{ data: acts }, { count: nRatings }, { data: conns }, { data: myRecent }] = await Promise.all([
     sb.from('activity').select('*, titles(name)').order('created_at', { ascending: false }).limit(20),
     sb.from('ratings').select('title_id', { count: 'exact', head: true }).eq('user_id', state.me.id),
     sb.from('connections').select('*'),
+    sb.from('ratings').select('rating, title_id, titles(id, name, media_type)').eq('user_id', state.me.id).order('activity_at', { ascending: false }).limit(5),
   ]);
   const friendIds = (conns ?? []).map((c) => (c.user_a === state.me.id ? c.user_b : c.user_a));
   const actText = { loved_your_pick: 'loved your pick', liked_your_pick: 'liked your pick', thanks: 'said thanks for', joined: 'joined from your invite' };
   $app.innerHTML = `
-    <div><h1>${esc(state.me.name)}</h1><span class="muted">${nRatings ?? 0} ratings · ${friendIds.length} friends</span></div>
+    <div><h1>${esc(state.me.name)}</h1><span class="muted">${nRatings ?? 0} rating${nRatings === 1 ? '' : 's'} · ${friendIds.length} friend${friendIds.length === 1 ? '' : 's'}</span></div>
     <div class="field"><label for="myName">Your name, as friends see it</label>
       <div class="row" style="flex-wrap:nowrap"><input id="myName" style="flex:1;min-width:0" value="${esc(state.me.name)}" autocomplete="given-name">
       <button class="primary" data-act="saveName">Save</button></div></div>
@@ -604,8 +614,9 @@ async function viewMe() {
     <div class="spread"><h2>Friends</h2>${state.me.is_host ? '<button class="primary" data-act="invite">Invite someone</button>' : ''}</div>
     ${friendIds.length ? `<div class="list">${friendIds.map((id) => `<a class="item" href="#/friend/${id}"><span>${esc(nameOf(id))}</span><span class="muted">›</span></a>`).join('')}</div>` : '<p class="muted">No friends connected yet.</p>'}
     <div id="inviteBox"></div>
-    <h2>My ratings</h2>
-    <a href="#/friend/${state.me.id}">See all my ratings</a>
+    <div class="spread"><h2>My picks</h2><a class="small" href="#/friend/${state.me.id}">See all</a></div>
+    ${myRecent?.length ? `<div class="list">${myRecent.map((r) => `<a class="item" href="${titleLink(r.titles)}"><span><strong>${esc(r.titles.name)}</strong> <span class="muted">· ${RATING[r.rating]}</span></span><span class="muted">›</span></a>`).join('')}</div>`
+      : '<p class="muted">Nothing rated yet. Tap Add to rate a show.</p>'}
     <div class="list">
       <div class="spread"><span>Weekly email (Sundays)</span><button class="chip ${state.me.weekly_email ? 'on' : ''}" data-act="toggleEmail">${state.me.weekly_email ? 'On' : 'Off'}</button></div>
       <a class="item" href="#/about"><span>About and credits</span><span class="muted">›</span></a>
@@ -676,7 +687,7 @@ async function viewFriend(id, filter = 'positive') {
   const svcNames = (state.services ?? []).filter((s) => s.ids.some((i) => (p.services ?? []).includes(i))).map((s) => s.name);
   $app.innerHTML = `
     <a href="javascript:history.back()">← Back</a>
-    <h1>${esc(isMe(id) ? 'My ratings' : p.name)}</h1>
+    <h1>${esc(isMe(id) ? 'My picks' : p.name)}</h1>
     <span class="muted">${(rs ?? []).length} ratings${svcNames.length && !isMe(id) ? ' · watches on ' + esc(svcNames.join(', ')) : ''}</span>
     <div class="seg"><button class="${filter === 'positive' ? 'on' : ''}" data-act="friendFilter" data-id="${id}" data-val="positive">Loved & Liked</button>
       <button class="${filter === 'all' ? 'on' : ''}" data-act="friendFilter" data-id="${id}" data-val="all">All</button></div>
