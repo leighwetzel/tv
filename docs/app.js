@@ -243,15 +243,23 @@ async function redeemPendingInvite() {
   if (!code) return;
   const { data } = await sb.rpc('redeem_invite', { invite_code: code });
   localStorage.removeItem('tv_invite');
+  if (!data) { // tell a newcomer why the link didn't work (used or expired)
+    const { data: why } = await sb.rpc('invite_status', { invite_code: code });
+    state.inviteProblem = why ?? null;
+  }
   if (data) state.me = null; // reload: now a member
 }
 
 // ---------------------------------------------------------------- not a member
 // Signed in without an invite: the database shows them nothing, so say why.
 function viewNotMember() {
+  const why = { used: 'That invite link has already been used. Each link works for one person.',
+    expired: 'That invite link has expired. Links work for 7 days.',
+    invalid: 'That invite link doesn’t work.' }[state.inviteProblem];
   $app.innerHTML = `${BRAND}
     <h2>TV is invite-only</h2>
-    <p>Ask the person who told you about tv to send you an invite link, then open it on this device.</p>
+    ${why ? `<p><strong>${why}</strong></p>` : ''}
+    <p>Ask the person who told you about TV to send you a new invite link, then open it on this device.</p>
     <button class="big" data-act="signOut">Sign out</button>`;
 }
 
@@ -687,11 +695,13 @@ actions.watched = async (d) => {
 async function viewMe() {
   await loadPeople();
   if (!state.services) state.services = (await fn('services')).services;
-  const [{ data: acts }, { count: nRatings }, { data: myRecent }] = await Promise.all([
+  const [{ data: acts }, { count: nRatings }, { data: myRecent }, { error: invitesClosed }] = await Promise.all([
     sb.from('activity').select('*, titles(name)').order('created_at', { ascending: false }).limit(20),
     sb.from('ratings').select('title_id', { count: 'exact', head: true }).eq('user_id', state.me.id),
     sb.from('ratings').select('rating, title_id, titles(id, name, media_type)').eq('user_id', state.me.id).order('activity_at', { ascending: false }).limit(5),
+    sb.rpc('my_open_invites'), // missing until migration 006: then only hosts invite
   ]);
+  const canInvite = invitesClosed ? state.me.is_host : true;
   const actText = { loved_your_pick: 'loved your pick', liked_your_pick: 'liked your pick', thanks: 'said thanks for', joined: 'joined from your invite' };
   $app.innerHTML = `
     <div><h1>${esc(state.me.name)}</h1><span class="muted">${nRatings ?? 0} rating${nRatings === 1 ? '' : 's'}</span></div>
@@ -705,7 +715,7 @@ async function viewMe() {
     <h2>My services</h2>
     <p class="muted">Used for the My services filter and highlights.</p>
     <div class="row" id="svc">${serviceChips('toggleMySvc')}</div>
-    ${state.me.is_host ? '<div class="spread"><h2>Invite</h2><button class="primary" data-act="invite">Invite someone</button></div>' : ''}
+    ${canInvite ? '<div class="spread"><h2>Invite</h2><button class="primary" data-act="invite">Invite someone</button></div>' : ''}
     <div id="inviteBox"></div>
     ${state.followsReady ? `<div class="list"><a class="item" href="#/following"><span><strong>Following</strong> <span class="muted">· ${state.following.size} ${state.following.size === 1 ? 'person' : 'people'}</span></span><span class="muted">›</span></a></div>` : ''}
     <div class="spread"><h2>My picks</h2><a class="small" href="#/friend/${state.me.id}">See all</a></div>
@@ -741,12 +751,15 @@ actions.saveName = async () => {
 };
 actions.invite = async () => {
   const { data, error } = await sb.from('invites').insert({ created_by: state.me.id }).select('code').single();
-  if (error) throw error;
+  if (error) return toast('Couldn’t make a link. You can have up to 10 unused links at a time.');
   const url = `${location.origin}${location.pathname}?invite=${data.code}`;
+  state.invitesMade = (state.invitesMade ?? 0) + 1;
   document.getElementById('inviteBox').innerHTML = `<div class="card field">
-    <p>Send this link to one person. It works once.</p>
-    <input readonly value="${esc(url)}" id="inviteUrl">
-    <div class="row"><button class="primary" data-act="shareInvite">Share</button><button data-act="copyInvite">Copy</button></div></div>`;
+    ${state.invitesMade > 1 ? '<p class="muted small">New link ready. The one before still works for whoever you sent it to.</p>' : ''}
+    <p><strong>This link is for one person only.</strong> Don’t send it to a group; only the first person to open it can join. It works for 7 days, and you’ll follow each other when they join.</p>
+    <input readonly value="${esc(url)}" id="inviteUrl" aria-label="Invite link">
+    <div class="row"><button class="primary" data-act="shareInvite">Share</button><button data-act="copyInvite">Copy</button></div>
+    <button class="big" data-act="invite">Make another link</button></div>`;
 };
 actions.shareInvite = async () => {
   const url = document.getElementById('inviteUrl').value;
