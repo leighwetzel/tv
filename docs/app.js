@@ -564,8 +564,10 @@ async function viewMe() {
   const friendIds = (conns ?? []).map((c) => (c.user_a === state.me.id ? c.user_b : c.user_a));
   const actText = { loved_your_pick: 'loved your pick', liked_your_pick: 'liked your pick', thanks: 'said thanks for', joined: 'joined from your invite' };
   $app.innerHTML = `
-    <div class="spread"><div><h1>${esc(state.me.name)}</h1><span class="muted">${nRatings ?? 0} ratings · ${friendIds.length} friends</span></div>
-      <button class="link" data-act="editName">Edit name</button></div>
+    <div><h1>${esc(state.me.name)}</h1><span class="muted">${nRatings ?? 0} ratings · ${friendIds.length} friends</span></div>
+    <div class="field"><label for="myName">Your name, as friends see it</label>
+      <div class="row" style="flex-wrap:nowrap"><input id="myName" value="${esc(state.me.name)}" autocomplete="given-name">
+      <button class="primary" data-act="saveName">Save</button></div></div>
     <h2>Activity</h2>
     ${acts?.length ? `<div class="list">${acts.map((a) => `<div class="${a.read_at ? '' : 'unread'}">
       <strong>${esc(nameOf(a.actor_id))}</strong> ${actText[a.kind]} ${a.titles ? `<a href="#/title/${encodeURIComponent(a.title_id)}">${esc(a.titles.name)}</a>` : ''} <span class="muted">· ${when(a.created_at)}</span></div>`).join('')}</div>`
@@ -597,11 +599,14 @@ actions.toggleEmail = async (d, el) => {
   await sb.from('profiles').update({ weekly_email: state.me.weekly_email }).eq('id', state.me.id);
   el.textContent = state.me.weekly_email ? 'On' : 'Off'; el.classList.toggle('on', state.me.weekly_email);
 };
-actions.editName = async () => {
-  const name = prompt('Your name, as friends see it', state.me.name);
-  if (!name?.trim()) return;
-  await sb.from('profiles').update({ name: name.trim() }).eq('id', state.me.id);
-  route();
+actions.saveName = async () => {
+  const name = document.getElementById('myName').value.trim();
+  if (!name) return toast('Name can’t be empty');
+  await sb.from('profiles').update({ name }).eq('id', state.me.id);
+  state.me.name = name;
+  document.querySelector('main h1').textContent = name;
+  document.getElementById('myName').blur();
+  toast('Name saved');
 };
 actions.invite = async () => {
   const { data, error } = await sb.from('invites').insert({ created_by: state.me.id }).select('code').single();
