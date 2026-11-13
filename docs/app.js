@@ -108,7 +108,9 @@ const state = {
   people: new Map(),      // id -> profile (everyone you can see: all members)
   providers: new Map(),   // title id -> { flatrate, rent, buy }
   services: null,         // streaming service list from TMDB
-  feedType: 'all', feedSvc: 'all', listSvc: 'all', listType: 'all', feedSort: 'review', listSort: 'added',
+  feedType: 'all', feedSvc: 'all', listSvc: 'all', listType: 'all', feedSort: 'review', listSort: 'added', feedPeople: 'all',
+  following: new Set(),   // ids you follow
+  followsReady: false,    // false until the follows table exists (migration 005)
   qp: null,               // quick-pick round in progress
 };
 
@@ -127,6 +129,9 @@ async function loadPeople() {
     const { data: row } = await sb.from('profiles').select('services, weekly_email').eq('id', state.me.id).single();
     Object.assign(state.me, row ?? {}, { is_member: true });
   }
+  const { data: fl, error: fe } = await sb.from('follows').select('followee');
+  state.followsReady = !fe;
+  state.following = new Set((fl ?? []).map((f) => f.followee));
 }
 
 async function loadProviders(ids) {
@@ -158,7 +163,7 @@ function watchOn(id) {
 
 const routes = {
   feed: viewFeed, title: viewTitle, add: viewAdd, quickpick: viewQuickpick,
-  list: viewList, me: viewMe, friend: viewFriend, welcome: viewWelcome, about: viewAbout,
+  list: viewList, me: viewMe, friend: viewFriend, welcome: viewWelcome, about: viewAbout, following: viewFollowing,
 };
 
 async function route() {
@@ -294,13 +299,17 @@ async function viewFeed() {
   const isQuiet = (r) => r.source === 'quickpick' && !r.note;
   const weekAgo = Date.now() - 7 * 864e5;
   const summary = new Map();
-  for (const r of rows ?? []) if (isQuiet(r) && !isMe(r.user_id) && Date.parse(r.activity_at) > weekAgo)
+  for (const r of rows ?? []) if (isQuiet(r) && !isMe(r.user_id) && Date.parse(r.activity_at) > weekAgo && (state.feedPeople !== 'following' || state.following.has(r.user_id)))
     summary.set(r.user_id, (summary.get(r.user_id) ?? 0) + 1);
 
-  // One card per title, started by a friend's Loved or Liked.
+  // Following: only reviews by people you follow (and your own).
+  const following = state.followsReady && state.feedPeople === 'following';
+  const inView = (r) => !following || isMe(r.user_id) || state.following.has(r.user_id);
+
+  // One card per title, started by someone's Loved or Liked.
   const cards = new Map();
   for (const r of rows ?? []) {
-    if (isQuiet(r)) continue;
+    if (isQuiet(r) || !inView(r)) continue;
     if (!cards.has(r.title_id)) cards.set(r.title_id, { title: r.titles, reviews: [], started: false });
     const c = cards.get(r.title_id);
     c.reviews.push(r);
@@ -319,10 +328,15 @@ async function viewFeed() {
 
   $app.innerHTML = `
     ${BRAND}
+    ${state.followsReady ? `<div class="tabs" role="tablist" aria-label="Whose picks">
+      ${[['all', 'Everyone'], ['following', 'Following']].map(([v, l]) => `<button role="tab" class="${state.feedPeople === v ? 'on' : ''}" aria-selected="${state.feedPeople === v}" data-act="feedPeople" data-val="${v}">${l}</button>`).join('')}</div>` : ''}
     ${filterBar('feed')}
     ${[...summary].map(([id, n]) => `<p class="muted"><a href="#/friend/${id}">${esc(nameOf(id))}</a> rated ${n} title${n > 1 ? 's' : ''} in quick-pick this week</p>`).join('')}
-    ${list.length ? list.map((c) => feedCard(c, saved)).join('') : `<p class="empty">No picks yet. ${state.people.size <= 1 ? 'Once others join, their picks show up here.' : 'Rate something to get things going.'}</p>`}`;
+    ${list.length ? list.map((c) => feedCard(c, saved)).join('')
+      : following && !state.following.size ? '<p class="empty">You’re not following anyone yet. In Everyone, tap a name on a review, then tap Follow.</p>'
+      : `<p class="empty">No picks yet. ${state.people.size <= 1 ? 'Once others join, their picks show up here.' : 'Rate something to get things going.'}</p>`}`;
 }
+actions.feedPeople = (d) => { state.feedPeople = d.val; route(); };
 
 // Filters: one "Showing … / Filter" line; the choices slide up in a panel.
 const TYPE = ['Show', [['all', 'All'], ['tv', 'TV'], ['movie', 'Movies']]];
@@ -693,6 +707,7 @@ async function viewMe() {
     <div class="row" id="svc">${serviceChips('toggleMySvc')}</div>
     ${state.me.is_host ? '<div class="spread"><h2>Invite</h2><button class="primary" data-act="invite">Invite someone</button></div>' : ''}
     <div id="inviteBox"></div>
+    ${state.followsReady ? `<div class="list"><a class="item" href="#/following"><span><strong>Following</strong> <span class="muted">· ${state.following.size} ${state.following.size === 1 ? 'person' : 'people'}</span></span><span class="muted">›</span></a></div>` : ''}
     <div class="spread"><h2>My picks</h2><a class="small" href="#/friend/${state.me.id}">See all</a></div>
     ${myRecent?.length ? `<div class="list">${myRecent.map((r) => `<a class="item" href="${titleLink(r.titles)}"><span><strong>${esc(r.titles.name)}</strong> <span class="muted">· ${RATING[r.rating]}</span></span><span class="muted">›</span></a>`).join('')}</div>`
       : '<p class="muted">Nothing rated yet. Tap Add to rate a show.</p>'}
@@ -775,8 +790,9 @@ async function viewFriend(id, filter) {
   await loadProviders(shown.map((r) => r.title_id));
   $app.innerHTML = `
     <a href="javascript:history.back()">← Back</a>
-    <h1>${esc(isMe(id) ? 'My picks' : p.name)}</h1>
-    <span class="muted">${(rs ?? []).length} rating${(rs ?? []).length === 1 ? '' : 's'}</span>
+    <div class="spread"><div><h1>${esc(isMe(id) ? 'My picks' : p.name)}</h1>
+      <span class="muted">${(rs ?? []).length} rating${(rs ?? []).length === 1 ? '' : 's'}</span></div>
+      ${!isMe(id) && state.followsReady ? followButton(id) : ''}</div>
     ${tabs.length ? `<div class="seg" role="group" aria-label="Rating">${tabs.map((k) => segBtn(k, RATING[k])).join('')}${segBtn('all', 'All')}</div>` : ''}
     ${shown.length ? shown.map((r) => `<div class="card pick-card"><div class="pick">
       <a href="${titleLink(r.titles)}">${poster(r.titles.poster_path, 'sm')}</a>
@@ -790,6 +806,35 @@ async function viewFriend(id, filter) {
       : `<p class="empty">${filter === 'all' ? 'Nothing rated yet.' : `No ${RATING[filter]} titles yet.`}</p>`}`;
 }
 actions.friendFilter = (d) => viewFriend(d.id, d.val);
+
+// ---------------------------------------------------------------- following
+const followButton = (id) => state.following.has(id)
+  ? `<button class="saved-btn" data-act="unfollow" data-id="${id}">✓ Following</button>`
+  : `<button class="primary" data-act="follow" data-id="${id}">+ Follow</button>`;
+actions.follow = async (d, el) => {
+  const { error } = await sb.from('follows').insert({ follower: state.me.id, followee: d.id });
+  if (error && error.code !== '23505') return toast('Couldn’t follow. Try again.');
+  state.following.add(d.id);
+  el.outerHTML = followButton(d.id);
+  toast(`Following ${nameOf(d.id)}`);
+};
+actions.unfollow = async (d, el) => {
+  if (!confirm(`Stop following ${nameOf(d.id)}?`)) return;
+  await sb.from('follows').delete().eq('follower', state.me.id).eq('followee', d.id);
+  state.following.delete(d.id);
+  if (el.dataset.row) el.closest('.item').remove(); else el.outerHTML = followButton(d.id);
+};
+async function viewFollowing() {
+  await loadPeople();
+  const ids = [...state.following].filter((id) => state.people.has(id)).sort((a, b) => nameOf(a).localeCompare(nameOf(b)));
+  $app.innerHTML = `
+    <a href="javascript:history.back()">← Back</a>
+    <h1>Following</h1>
+    ${ids.length ? `<div class="list">${ids.map((id) => `<div class="item"><a class="person" href="#/friend/${id}">${esc(nameOf(id))}</a>
+      <button data-act="unfollow" data-id="${id}" data-row="1">Unfollow</button></div>`).join('')}</div>`
+      : '<p class="empty">You’re not following anyone yet.</p>'}
+    <p class="muted">Find people by tapping a name on any review in Everyone.</p>`;
+}
 
 // ---------------------------------------------------------------- updates
 (async () => {
