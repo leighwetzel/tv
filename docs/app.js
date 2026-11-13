@@ -105,7 +105,7 @@ new MutationObserver(() => fillSeasons()).observe(document.getElementById('app')
 const state = {
   session: null,
   me: null,               // my profile row
-  people: new Map(),      // id -> profile (me + connections)
+  people: new Map(),      // id -> profile (everyone you can see: all members)
   providers: new Map(),   // title id -> { flatrate, rent, buy }
   services: null,         // streaming service list from TMDB
   feedType: 'all', feedSvc: 'all', listSvc: 'all', listType: 'all', feedSort: 'review', listSort: 'added',
@@ -113,12 +113,20 @@ const state = {
 };
 
 const isMe = (id) => id === state.me?.id;
-const nameOf = (id) => isMe(id) ? 'You' : (state.people.get(id)?.name || 'Friend');
+const nameOf = (id) => isMe(id) ? 'You' : (state.people.get(id)?.name || 'Someone');
 
+// Other people's rows carry only their name and photo; your own settings come from my_settings().
 async function loadPeople() {
-  const { data } = await sb.from('profiles').select('id, name, avatar_url, services, is_host, weekly_email, onboarded');
+  const { data } = await sb.from('profiles').select('id, name, avatar_url, is_host, onboarded');
   state.people = new Map((data ?? []).map((p) => [p.id, p]));
   state.me = state.people.get(state.session.user.id) ?? null;
+  if (!state.me) return;
+  const { data: mine, error } = await sb.rpc('my_settings');
+  if (!error && mine?.[0]) Object.assign(state.me, mine[0]);
+  else { // database not updated yet: older rules, read your own row directly
+    const { data: row } = await sb.from('profiles').select('services, weekly_email').eq('id', state.me.id).single();
+    Object.assign(state.me, row ?? {}, { is_member: true });
+  }
 }
 
 async function loadProviders(ids) {
@@ -165,6 +173,7 @@ async function route() {
   if (/access_token|error_description/.test(location.hash)) return;
   const [name, ...rest] = location.hash.replace(/^#\/?/, '').split('/');
   let view = routes[name] ? name : 'feed';
+  if (state.me.is_member === false) { $nav.hidden = true; return viewNotMember(); }
   if (!state.me.onboarded && view !== 'quickpick' && view !== 'about') view = 'welcome';
 
   $nav.hidden = view === 'welcome';
@@ -229,19 +238,28 @@ async function redeemPendingInvite() {
   if (!code) return;
   const { data } = await sb.rpc('redeem_invite', { invite_code: code });
   localStorage.removeItem('tv_invite');
-  if (data) state.me = null; // reload connections
+  if (data) state.me = null; // reload: now a member
+}
+
+// ---------------------------------------------------------------- not a member
+// Signed in without an invite: the database shows them nothing, so say why.
+function viewNotMember() {
+  $app.innerHTML = `${BRAND}
+    <h2>tv is invite-only</h2>
+    <p>Ask the person who told you about tv to send you an invite link, then open it on this device.</p>
+    <button class="big" data-act="signOut">Sign out</button>`;
 }
 
 // ---------------------------------------------------------------- welcome
 
 async function viewWelcome() {
   if (!state.services) state.services = (await fn('services')).services;
-  const hosts = [...state.people.values()].filter((p) => p.is_host && !isMe(p.id)).map((p) => esc(p.name));
   $app.innerHTML = `
     <h1>Welcome to tv</h1>
-    ${hosts.length ? `<p class="muted">You’re connected with ${hosts.join(' and ')}, and you’ll see their picks.</p>` : ''}
-    <div class="field"><label for="name">Your name, as friends see it</label>
-      <input id="name" value="${esc(state.me.name)}" autocomplete="given-name"></div>
+    <p class="muted">You’ll see picks from everyone on tv, and they’ll see yours.</p>
+    <div class="field"><label for="name">Your name, as others see it</label>
+      <input id="name" value="${esc(state.me.name)}" autocomplete="given-name" placeholder="First name">
+      <p class="muted small" id="nameError" role="alert"></p></div>
     <h2>Which streaming services do you have?</h2>
     <div class="row" id="svc">${serviceChips('toggleSvc')}</div>
     <button class="primary big" data-act="finishWelcome">Done</button>
@@ -257,6 +275,7 @@ const chosenServiceIds = () => [...document.querySelectorAll('#svc .chip.on')].f
 actions.toggleSvc = (d, el) => { el.classList.toggle('on'); el.setAttribute('aria-pressed', el.classList.contains('on')); };
 actions.finishWelcome = async () => {
   const name = document.getElementById('name').value.trim() || state.me.name;
+  if (!name) { document.getElementById('nameError').textContent = 'Enter the name people will see.'; document.getElementById('name').focus(); return; }
   const services = chosenServiceIds();
   await sb.from('profiles').update({ name, services, onboarded: true }).eq('id', state.me.id);
   Object.assign(state.me, { name, services, onboarded: true });
@@ -302,7 +321,7 @@ async function viewFeed() {
     ${BRAND}
     ${filterBar('feed')}
     ${[...summary].map(([id, n]) => `<p class="muted"><a href="#/friend/${id}">${esc(nameOf(id))}</a> rated ${n} title${n > 1 ? 's' : ''} in quick-pick this week</p>`).join('')}
-    ${list.length ? list.map((c) => feedCard(c, saved)).join('') : `<p class="empty">No picks yet. ${state.people.size <= 1 ? 'Once friends join, their picks show up here.' : 'Rate something to get things going.'}</p>`}`;
+    ${list.length ? list.map((c) => feedCard(c, saved)).join('') : `<p class="empty">No picks yet. ${state.people.size <= 1 ? 'Once others join, their picks show up here.' : 'Rate something to get things going.'}</p>`}`;
 }
 
 // Filters: one "Showing … / Filter" line; the choices slide up in a panel.
@@ -429,8 +448,8 @@ async function viewTitle(id) {
         <div class="row"><button class="link" data-act="cancelEdit">Cancel</button>
           <button class="link danger" data-act="removeRating" data-id="${esc(id)}">Remove my rating</button></div>
       </div>` : ratingForm(null, id)}
-    <h2>Friends</h2>
-    ${others.length ? `<div class="list">${others.map((r) => reviewHtml(r, true)).join('')}</div>` : '<p class="muted">None of your friends have rated this yet.</p>'}`;
+    <h2>Reviews</h2>
+    ${others.length ? `<div class="list">${others.map((r) => reviewHtml(r, true)).join('')}</div>` : '<p class="muted">No one else has rated this yet.</p>'}`;
 }
 
 function ratingForm(mine, titleId, saveLabel = 'Save') {
@@ -441,7 +460,7 @@ function ratingForm(mine, titleId, saveLabel = 'Save') {
     <select id="season" class="season" data-title="${esc(titleId)}" data-current="${mine?.season ?? ''}"><option value="">Whole show</option></select>` : ''}
     <label for="note">One-line note (optional)</label>
     <input id="note" maxlength="200" value="${esc(mine?.note)}" placeholder="What should friends know?">
-    <p class="muted">Loved and Liked put this in friends’ feeds. You can change your rating anytime.</p>
+    <p class="muted">Loved and Liked put this in everyone’s feed. You can change your rating anytime.</p>
     <button class="primary big" type="button" data-act="saveRating">${saveLabel}</button></form>`;
 }
 actions.editReview = () => {
@@ -654,28 +673,27 @@ actions.watched = async (d) => {
 async function viewMe() {
   await loadPeople();
   if (!state.services) state.services = (await fn('services')).services;
-  const [{ data: acts }, { count: nRatings }, { data: conns }, { data: myRecent }] = await Promise.all([
+  const [{ data: acts }, { count: nRatings }, { data: myRecent }] = await Promise.all([
     sb.from('activity').select('*, titles(name)').order('created_at', { ascending: false }).limit(20),
     sb.from('ratings').select('title_id', { count: 'exact', head: true }).eq('user_id', state.me.id),
-    sb.from('connections').select('*'),
     sb.from('ratings').select('rating, title_id, titles(id, name, media_type)').eq('user_id', state.me.id).order('activity_at', { ascending: false }).limit(5),
   ]);
-  const friendIds = (conns ?? []).map((c) => (c.user_a === state.me.id ? c.user_b : c.user_a));
+  const others = [...state.people.values()].filter((p) => !isMe(p.id) && p.name).sort((a, b) => a.name.localeCompare(b.name));
   const actText = { loved_your_pick: 'loved your pick', liked_your_pick: 'liked your pick', thanks: 'said thanks for', joined: 'joined from your invite' };
   $app.innerHTML = `
-    <div><h1>${esc(state.me.name)}</h1><span class="muted">${nRatings ?? 0} rating${nRatings === 1 ? '' : 's'} · ${friendIds.length} friend${friendIds.length === 1 ? '' : 's'}</span></div>
-    <div class="field"><label for="myName">Your name, as friends see it</label>
+    <div><h1>${esc(state.me.name)}</h1><span class="muted">${nRatings ?? 0} rating${nRatings === 1 ? '' : 's'}</span></div>
+    <div class="field"><label for="myName">Your name, as others see it</label>
       <div class="row" style="flex-wrap:nowrap"><input id="myName" style="flex:1;min-width:0" value="${esc(state.me.name)}" autocomplete="given-name">
       <button class="primary" data-act="saveName">Save</button></div></div>
     <h2>Activity</h2>
     ${acts?.length ? `<div class="list">${acts.map((a) => `<div class="${a.read_at ? '' : 'unread'}">
       ${personLink(a.actor_id)} ${actText[a.kind]} ${a.titles ? `<a href="#/title/${encodeURIComponent(a.title_id)}">${esc(a.titles.name)}</a>` : ''} <span class="muted">· ${when(a.created_at)}</span></div>`).join('')}</div>`
-      : '<p class="muted">Nothing yet. When friends save or thank your picks, it shows here.</p>'}
+      : '<p class="muted">Nothing yet. When people save or thank your picks, it shows here.</p>'}
     <h2>My services</h2>
     <p class="muted">Used for the My services filter and highlights.</p>
     <div class="row" id="svc">${serviceChips('toggleMySvc')}</div>
-    <div class="spread"><h2>Friends</h2>${state.me.is_host ? '<button class="primary" data-act="invite">Invite someone</button>' : ''}</div>
-    ${friendIds.length ? `<div class="list">${friendIds.map((id) => `<a class="item" href="#/friend/${id}"><span>${esc(nameOf(id))}</span><span class="muted">›</span></a>`).join('')}</div>` : '<p class="muted">No friends connected yet.</p>'}
+    <div class="spread"><h2>People on tv</h2>${state.me.is_host ? '<button class="primary" data-act="invite">Invite someone</button>' : ''}</div>
+    ${others.length ? `<div class="list">${others.map((p) => `<a class="item" href="#/friend/${p.id}"><span>${esc(p.name)}</span><span class="muted">›</span></a>`).join('')}</div>` : '<p class="muted">No one else yet.</p>'}
     <div id="inviteBox"></div>
     <div class="spread"><h2>My picks</h2><a class="small" href="#/friend/${state.me.id}">See all</a></div>
     ${myRecent?.length ? `<div class="list">${myRecent.map((r) => `<a class="item" href="${titleLink(r.titles)}"><span><strong>${esc(r.titles.name)}</strong> <span class="muted">· ${RATING[r.rating]}</span></span><span class="muted">›</span></a>`).join('')}</div>`
@@ -723,7 +741,7 @@ actions.shareInvite = async () => {
   else actions.copyInvite();
 };
 actions.copyInvite = async () => { await navigator.clipboard.writeText(document.getElementById('inviteUrl').value); toast('Link copied'); };
-actions.signOut = async () => { await sb.auth.signOut(); };
+actions.signOut = async () => { localStorage.removeItem('tv_invite'); await sb.auth.signOut(); };
 actions.deleteAccount = async () => {
   if (!confirm('Delete your account and all your ratings? This can’t be undone.')) return;
   await sb.rpc('delete_my_account');
@@ -757,11 +775,10 @@ async function viewFriend(id, filter) {
   const shown = (rs ?? []).filter((r) => filter === 'all' || r.rating === filter);
   const segBtn = (val, label) => `<button class="${filter === val ? 'on' : ''}" data-act="friendFilter" data-id="${id}" data-val="${val}" aria-pressed="${filter === val}">${label}</button>`;
   await loadProviders(shown.map((r) => r.title_id));
-  const svcNames = (state.services ?? []).filter((s) => s.ids.some((i) => (p.services ?? []).includes(i))).map((s) => s.name);
   $app.innerHTML = `
     <a href="javascript:history.back()">← Back</a>
     <h1>${esc(isMe(id) ? 'My picks' : p.name)}</h1>
-    <span class="muted">${(rs ?? []).length} ratings${svcNames.length && !isMe(id) ? ' · watches on ' + esc(svcNames.join(', ')) : ''}</span>
+    <span class="muted">${(rs ?? []).length} rating${(rs ?? []).length === 1 ? '' : 's'}</span>
     ${tabs.length ? `<div class="seg" role="group" aria-label="Rating">${tabs.map((k) => segBtn(k, RATING[k])).join('')}${segBtn('all', 'All')}</div>` : ''}
     ${shown.length ? shown.map((r) => `<div class="card pick-card"><div class="pick">
       <a href="${titleLink(r.titles)}">${poster(r.titles.poster_path, 'sm')}</a>
@@ -772,16 +789,9 @@ async function viewFriend(id, filter) {
         : saved.has(r.title_id) ? SAVED
         : `<button class="primary" data-act="save" data-id="${esc(r.title_id)}">+ Want to watch</button>`}
         ${myRating.has(r.title_id) ? '' : `<button data-act="seenIt" data-id="${esc(r.title_id)}">Seen it</button>`}</div>`}</div>`).join('')
-      : `<p class="empty">${filter === 'all' ? 'Nothing rated yet.' : `No ${RATING[filter]} titles yet.`}</p>`}
-    ${!isMe(id) && !p.is_host ? `<button class="link danger" data-act="removeFriend" data-id="${id}">Remove ${esc(p.name)} as a friend</button>` : ''}`;
+      : `<p class="empty">${filter === 'all' ? 'Nothing rated yet.' : `No ${RATING[filter]} titles yet.`}</p>`}`;
 }
 actions.friendFilter = (d) => viewFriend(d.id, d.val);
-actions.removeFriend = async (d) => {
-  if (!confirm('Remove this friend? You’ll stop seeing each other’s picks.')) return;
-  const [a, b] = [state.me.id, d.id].sort();
-  await sb.from('connections').delete().eq('user_a', a).eq('user_b', b);
-  state.me = null; location.hash = '#/me';
-};
 
 // ---------------------------------------------------------------- updates
 (async () => {
