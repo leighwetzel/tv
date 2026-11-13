@@ -343,7 +343,7 @@ async function viewTitle(id) {
     <a href="javascript:history.back()">← Back</a>
     <div class="pick">${poster(t.poster_path, 'lg')}
       <div class="pick-body"><h1>${esc(t.name)}</h1><span class="muted">${kind(t)}</span>
-        ${wl && !wl.watched_at ? '<span class="muted">On your list</span>' : `<button class="primary" data-act="save" data-id="${esc(id)}">+ Want to watch</button>`}
+        ${mine ? '' : wl && !wl.watched_at ? '<span class="muted">On your list</span>' : `<button class="primary" data-act="save" data-id="${esc(id)}">+ Want to watch</button>`}
       </div></div>
     <section class="card watchbox">
       <div class="muted small">WATCH ON</div>
@@ -352,7 +352,17 @@ async function viewTitle(id) {
       <p class="credits">Streaming data from JustWatch</p>
     </section>
     <h2>Your rating</h2>
-    ${ratingForm(mine, id)}
+    ${mine ? `
+      <div class="card" id="myReview">
+        <div class="spread"><span><strong>${RATING[mine.rating]}</strong> <span class="muted">· ${when(mine.activity_at)}</span></span>
+          <button class="link" data-act="editReview">Edit review</button></div>
+        ${mine.note ? `<div class="note">“${esc(mine.note)}”</div>` : '<p class="muted">No note.</p>'}
+      </div>
+      <div id="reviewForm" hidden>
+        ${ratingForm(mine, id, 'Save changes')}
+        <div class="row"><button class="link" data-act="cancelEdit">Cancel</button>
+          <button class="link danger" data-act="removeRating" data-id="${esc(id)}">Remove my rating</button></div>
+      </div>` : ratingForm(null, id)}
     <h2>Friends</h2>
     ${others.length ? `<div class="list">${others.map((r) => reviewHtml(r, true)).join('')}</div>` : '<p class="muted">None of your friends have rated this yet.</p>'}`;
 }
@@ -366,6 +376,20 @@ function ratingForm(mine, titleId, saveLabel = 'Save') {
     <p class="muted">Loved and Liked put this in friends’ feeds. You can change your rating anytime.</p>
     <button class="primary big" type="button" data-act="saveRating">${saveLabel}</button></form>`;
 }
+actions.editReview = () => {
+  document.getElementById('myReview').hidden = true;
+  document.getElementById('reviewForm').hidden = false;
+};
+actions.cancelEdit = () => {
+  document.getElementById('myReview').hidden = false;
+  document.getElementById('reviewForm').hidden = true;
+};
+actions.removeRating = async (d) => {
+  if (!confirm('Remove your rating for this title?')) return;
+  await sb.from('ratings').delete().eq('user_id', state.me.id).eq('title_id', d.id);
+  toast('Rating removed');
+  route();
+};
 actions.pickRating = (d, el) => {
   el.parentElement.querySelectorAll('button').forEach((b) => { b.classList.toggle('on', b === el); b.setAttribute('aria-pressed', b === el); });
 };
@@ -426,7 +450,8 @@ actions.chooseTitle = async (d) => {
     <button class="link" data-act="backToAdd">← Search again</button>
     <div class="pick">${poster(t.poster_path, 'lg')}<div class="pick-body"><h1>${esc(t.name)}</h1><span class="muted">${kind(t)}</span>${watchOn(t.id)}</div></div>
     <h2>How was it?</h2>
-    ${ratingForm(mine, d.id).replace('<form ', `<form data-after="#/title/${encodeURIComponent(d.id)}" `)}`;
+    ${mine ? '<p class="muted">You’ve rated this already. Change it below.</p>' : ''}
+    ${ratingForm(mine, d.id, mine ? 'Save changes' : 'Save').replace('<form ', `<form data-after="#/title/${encodeURIComponent(d.id)}" `)}`;
 };
 actions.backToAdd = () => viewAdd();
 
