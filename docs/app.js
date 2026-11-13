@@ -47,7 +47,7 @@ const poster = (path, cls = '') => path
 const kind = (t) => `${t.media_type === 'tv' ? 'TV' : 'Movie'}${t.year ? ' · ' + t.year : ''}`;
 const BRAND = `<header class="brand">
   <svg class="logo" viewBox="0 0 64 64" aria-hidden="true"><rect width="64" height="64" rx="15" fill="currentColor"/><rect x="10" y="15" width="44" height="31" rx="5" fill="none" stroke="#fff" stroke-width="4"/><path d="M24 54h16" stroke="#fff" stroke-width="4" stroke-linecap="round"/><path d="M32 39c-6-4-9-7-9-11a4.5 4.5 0 0 1 9-1.5 4.5 4.5 0 0 1 9 1.5c0 4-3 7-9 11z" fill="#fff"/></svg>
-  <div><h1>tv</h1><p class="tagline">Picks from friends and family</p></div></header>`;
+  <div><h1>TV</h1><p class="tagline">Picks from friends and family</p></div></header>`;
 const personLink = (id) => `<a class="person" href="#/friend/${encodeURIComponent(id)}">${esc(nameOf(id))}</a>`;
 const SAVED = '<span class="btn saved">✓ Saved</span>'; // shown in place of + Want to watch once a title is on your list
 const titleLink = (t) => `#/title/${encodeURIComponent(t.id)}`;
@@ -245,7 +245,7 @@ async function redeemPendingInvite() {
 // Signed in without an invite: the database shows them nothing, so say why.
 function viewNotMember() {
   $app.innerHTML = `${BRAND}
-    <h2>tv is invite-only</h2>
+    <h2>TV is invite-only</h2>
     <p>Ask the person who told you about tv to send you an invite link, then open it on this device.</p>
     <button class="big" data-act="signOut">Sign out</button>`;
 }
@@ -255,15 +255,15 @@ function viewNotMember() {
 async function viewWelcome() {
   if (!state.services) state.services = (await fn('services')).services;
   $app.innerHTML = `
-    <h1>Welcome to tv</h1>
-    <p class="muted">You’ll see picks from everyone on tv, and they’ll see yours.</p>
+    <h1>Welcome to TV</h1>
+    <p class="muted">You’ll see picks from everyone on TV, and they’ll see yours.</p>
     <div class="field"><label for="name">Your name, as others see it</label>
       <input id="name" value="${esc(state.me.name)}" autocomplete="given-name" placeholder="First name">
       <p class="muted small" id="nameError" role="alert"></p></div>
     <h2>Which streaming services do you have?</h2>
     <div class="row" id="svc">${serviceChips('toggleSvc')}</div>
     <button class="primary big" data-act="finishWelcome">Done</button>
-    <p class="muted">Tip: on iPhone or iPad, tap Share → Add to Home Screen to keep tv one tap away.</p>`;
+    <p class="muted">Tip: on iPhone or iPad, tap Share → Add to Home Screen to keep TV one tap away.</p>`;
 }
 function serviceChips(act) {
   return state.services.map((s) => {
@@ -678,7 +678,6 @@ async function viewMe() {
     sb.from('ratings').select('title_id', { count: 'exact', head: true }).eq('user_id', state.me.id),
     sb.from('ratings').select('rating, title_id, titles(id, name, media_type)').eq('user_id', state.me.id).order('activity_at', { ascending: false }).limit(5),
   ]);
-  const others = [...state.people.values()].filter((p) => !isMe(p.id) && p.name).sort((a, b) => a.name.localeCompare(b.name));
   const actText = { loved_your_pick: 'loved your pick', liked_your_pick: 'liked your pick', thanks: 'said thanks for', joined: 'joined from your invite' };
   $app.innerHTML = `
     <div><h1>${esc(state.me.name)}</h1><span class="muted">${nRatings ?? 0} rating${nRatings === 1 ? '' : 's'}</span></div>
@@ -692,8 +691,7 @@ async function viewMe() {
     <h2>My services</h2>
     <p class="muted">Used for the My services filter and highlights.</p>
     <div class="row" id="svc">${serviceChips('toggleMySvc')}</div>
-    <div class="spread"><h2>People on tv</h2>${state.me.is_host ? '<button class="primary" data-act="invite">Invite someone</button>' : ''}</div>
-    ${others.length ? `<div class="list">${others.map((p) => `<a class="item" href="#/friend/${p.id}"><span>${esc(p.name)}</span><span class="muted">›</span></a>`).join('')}</div>` : '<p class="muted">No one else yet.</p>'}
+    ${state.me.is_host ? '<div class="spread"><h2>Invite</h2><button class="primary" data-act="invite">Invite someone</button></div>' : ''}
     <div id="inviteBox"></div>
     <div class="spread"><h2>My picks</h2><a class="small" href="#/friend/${state.me.id}">See all</a></div>
     ${myRecent?.length ? `<div class="list">${myRecent.map((r) => `<a class="item" href="${titleLink(r.titles)}"><span><strong>${esc(r.titles.name)}</strong> <span class="muted">· ${RATING[r.rating]}</span></span><span class="muted">›</span></a>`).join('')}</div>`
@@ -737,7 +735,7 @@ actions.invite = async () => {
 };
 actions.shareInvite = async () => {
   const url = document.getElementById('inviteUrl').value;
-  if (navigator.share) await navigator.share({ title: 'Join me on tv', text: 'TV and movie picks from friends and family:', url }).catch(() => {});
+  if (navigator.share) await navigator.share({ title: 'Join me on TV', text: 'TV and movie picks from friends and family:', url }).catch(() => {});
   else actions.copyInvite();
 };
 actions.copyInvite = async () => { await navigator.clipboard.writeText(document.getElementById('inviteUrl').value); toast('Link copied'); };

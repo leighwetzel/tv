@@ -88,7 +88,7 @@ a.more { align-self: flex-start; min-height: 44px; display: inline-flex; align-i
 
 .brand { display: flex; align-items: center; gap: 12px; color: var(--accent); }
 .brand .logo { width: 50px; height: 50px; flex: none; }
-.brand h1 { color: var(--ink); font-size: calc(var(--base) + 14px); line-height: 1; letter-spacing: -.5px; }
+.brand h1 { color: var(--ink); font-size: calc(var(--base) + 14px); line-height: 1; letter-spacing: .02em; }
 .tagline { color: var(--muted); font-size: calc(var(--base) - 2px); margin-top: 4px; }
 
 /* Filter line and slide-up panel */
