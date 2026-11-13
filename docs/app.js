@@ -45,6 +45,9 @@ const poster = (path, cls = '') => path
   ? `<img class="poster ${cls}" src="${IMG}${cls === 'xl' || cls === 'lg' ? 'w342' : 'w185'}${esc(path)}" alt="" loading="lazy">`
   : `<div class="poster ${cls}" aria-hidden="true"></div>`;
 const kind = (t) => `${t.media_type === 'tv' ? 'TV' : 'Movie'}${t.year ? ' · ' + t.year : ''}`;
+const BRAND = `<header class="brand">
+  <svg class="logo" viewBox="0 0 64 64" aria-hidden="true"><rect width="64" height="64" rx="15" fill="currentColor"/><rect x="10" y="15" width="44" height="31" rx="5" fill="none" stroke="#fff" stroke-width="4"/><path d="M24 54h16" stroke="#fff" stroke-width="4" stroke-linecap="round"/><path d="M32 39c-6-4-9-7-9-11a4.5 4.5 0 0 1 9-1.5 4.5 4.5 0 0 1 9 1.5c0 4-3 7-9 11z" fill="#fff"/></svg>
+  <div><h1>tv</h1><p class="tagline">Picks from friends and family</p></div></header>`;
 const titleLink = (t) => `#/title/${encodeURIComponent(t.id)}`;
 
 function when(ts) {
@@ -183,8 +186,7 @@ async function updateActivityDot() {
 function viewSignIn(step = 'email', email = '') {
   if (step === 'email') {
     $app.innerHTML = `
-      <h1>tv</h1>
-      <p class="muted">TV and movie picks from your friends and family.</p>
+      ${BRAND}
       <form id="f" class="field">
         <label for="email">Your email</label>
         <input id="email" type="email" autocomplete="email" required value="${esc(email)}">
@@ -240,7 +242,8 @@ async function viewWelcome() {
       <input id="name" value="${esc(state.me.name)}" autocomplete="given-name"></div>
     <h2>Which streaming services do you have?</h2>
     <div class="row" id="svc">${serviceChips('toggleSvc')}</div>
-    <button class="primary big" data-act="finishWelcome">Done</button>`;
+    <button class="primary big" data-act="finishWelcome">Done</button>
+    <p class="muted">Tip: on iPhone or iPad, tap Share → Add to Home Screen to keep tv one tap away.</p>`;
 }
 function serviceChips(act) {
   return state.services.map((s) => {
@@ -293,7 +296,7 @@ async function viewFeed() {
   const saved = new Set((wl ?? []).map((w) => w.title_id));
 
   $app.innerHTML = `
-    <div class="spread"><h1>tv</h1></div>
+    ${BRAND}
     <div class="seg" role="group" aria-label="Type">
       ${seg('feedType', 'all', 'All')}${seg('feedType', 'tv', 'TV')}${seg('feedType', 'movie', 'Movies')}</div>
     <div class="seg" role="group" aria-label="Services">
@@ -772,16 +775,9 @@ sb.auth.onAuthStateChange((event, session) => {
   }, 0);
 });
 
-// Shown once, right after signing in (by code or by the email link).
-async function signedIn() {
-  if (/access_token|error_description/.test(location.hash)) history.replaceState(null, '', location.pathname);
-  await loadPeople();
-  $nav.hidden = true;
-  const first = !state.me?.onboarded;
-  $app.innerHTML = `
-    <h1>You’re signed in</h1>
-    <p class="muted">${first ? 'Next: a few quick steps to set up your profile.' : `Welcome back, ${esc(state.me?.name || '')}.`}</p>
-    <p class="muted">Tip: on iPhone or iPad, tap Share → Add to Home Screen to keep tv one tap away.</p>
-    <button class="primary big" data-act="continue">${first ? 'Get started' : 'Go to the feed'}</button>`;
+// Right after signing in (by code or by the email link): go straight to the feed.
+// First-timers are sent on to Welcome by route().
+function signedIn() {
+  history.replaceState(null, '', location.pathname + '#/feed');
+  route();
 }
-actions.continue = () => { location.hash = '#/feed'; route(); };

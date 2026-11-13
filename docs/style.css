@@ -83,6 +83,11 @@ a.more { align-self: flex-start; min-height: 44px; display: inline-flex; align-i
 .credits { font-size: calc(var(--base) - 4px); color: var(--muted); }
 .pick > button { align-self: center; min-width: 50px; font-size: calc(var(--base) + 6px); }
 
+.brand { display: flex; align-items: center; gap: 12px; color: var(--accent); }
+.brand .logo { width: 50px; height: 50px; flex: none; }
+.brand h1 { color: var(--ink); font-size: calc(var(--base) + 14px); line-height: 1; letter-spacing: -.5px; }
+.tagline { color: var(--muted); font-size: calc(var(--base) - 2px); margin-top: 4px; }
+
 /* Bottom bar */
 nav { position: fixed; left: 0; right: 0; bottom: 0; display: flex; justify-content: center; gap: 4px; background: rgba(255, 255, 255, .97); backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px); border-top: 1.5px solid var(--line); padding: 6px 8px calc(6px + env(safe-area-inset-bottom)); z-index: 5; }
 nav[hidden] { display: none; }
