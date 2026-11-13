@@ -755,15 +755,15 @@ actions.invite = async () => {
   const url = `${location.origin}${location.pathname}?invite=${data.code}`;
   state.invitesMade = (state.invitesMade ?? 0) + 1;
   document.getElementById('inviteBox').innerHTML = `<div class="card field">
-    ${state.invitesMade > 1 ? '<p class="muted small">New link ready. The one before still works for whoever you sent it to.</p>' : ''}
-    <p><strong>This link is for one person only.</strong> Don’t send it to a group; only the first person to open it can join. It works for 7 days, and you’ll follow each other when they join.</p>
+    ${state.invitesMade > 1 ? '<p class="muted small">New link ready.</p>' : ''}
+    <p><strong>For one person only.</strong> The link works once, for 7 days.</p>
     <input readonly value="${esc(url)}" id="inviteUrl" aria-label="Invite link">
     <div class="row"><button class="primary" data-act="shareInvite">Share</button><button data-act="copyInvite">Copy</button></div>
-    <button class="big" data-act="invite">Make another link</button></div>`;
+    <button class="big" data-act="invite">New link</button></div>`;
 };
 actions.shareInvite = async () => {
   const url = document.getElementById('inviteUrl').value;
-  if (navigator.share) await navigator.share({ title: 'Join me on TV', text: 'TV and movie picks from friends and family:', url }).catch(() => {});
+  if (navigator.share) await navigator.share({ title: 'Let’s share what we’re watching on TV', text: 'Let’s share what we’re watching on TV:', url }).catch(() => {});
   else actions.copyInvite();
 };
 actions.copyInvite = async () => { await navigator.clipboard.writeText(document.getElementById('inviteUrl').value); toast('Link copied'); };
