@@ -87,7 +87,7 @@ const state = {
   people: new Map(),      // id -> profile (me + connections)
   providers: new Map(),   // title id -> { flatrate, rent, buy }
   services: null,         // streaming service list from TMDB
-  feedType: 'all', feedSvc: 'all', listSvc: 'mine', listType: 'all',
+  feedType: 'all', feedSvc: 'all', listSvc: 'all', listType: 'all',
   qp: null,               // quick-pick round in progress
 };
 
@@ -566,7 +566,7 @@ async function viewList() {
   if (state.listSvc === 'mine') items = items.filter((r) => onMyServices(r.title_id));
   $app.innerHTML = `
     <h1>Want to watch</h1>
-    <div class="seg">${seg('listSvc', 'mine', 'On my services')}${seg('listSvc', 'all', 'All')}</div>
+    <div class="seg">${seg('listSvc', 'all', 'All')}${seg('listSvc', 'mine', 'On my services')}</div>
     <div class="seg">${seg('listType', 'all', 'All')}${seg('listType', 'tv', 'TV')}${seg('listType', 'movie', 'Movies')}</div>
     ${items.length ? items.map((r) => {
       const from = r.watchlist_credits.map((c) => esc(nameOf(c.recommender_id)));
