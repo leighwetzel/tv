@@ -170,6 +170,11 @@ Deno.serve(async (req) => {
       }
       case 'providers':
         return json({ providers: await providersFor((body.ids ?? []).slice(0, 60)) });
+      case 'tvinfo': {
+        const num = String(body.id ?? '').replace(/^tv:/, '');
+        const d = await tmdb(`/tv/${num}`);
+        return json({ seasons: d.number_of_seasons ?? null, status: d.status ?? null, last_air_date: d.last_air_date ?? null });
+      }
       case 'services':
         return json({ services: await services() });
       case 'discover':

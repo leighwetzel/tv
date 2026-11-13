@@ -37,6 +37,7 @@ function subs(id) {
   }
   return [...out.values()];
 }
+const ratingLabel = (r) => `${RATING[r.rating]}${r.season ? ' · S' + r.season : ''}`;
 const isMine = (svc) => svc.ids.some((i) => myServices().includes(i));
 
 const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
@@ -78,6 +79,21 @@ document.addEventListener('click', async (e) => {
   try { await actions[el.dataset.act](el.dataset, el); }
   catch (err) { console.error(err); toast('Something went wrong. Try again.'); }
 });
+
+const seasonCache = new Map();
+async function fillSeasons() {
+  for (const sel of document.querySelectorAll('select.season:not([data-filled])')) {
+    sel.dataset.filled = '1';
+    const id = sel.dataset.title;
+    try {
+      if (!seasonCache.has(id)) seasonCache.set(id, (await fn('tvinfo', { id })).seasons);
+      const n = seasonCache.get(id) || 0;
+      for (let i = 1; i <= n; i++) sel.insertAdjacentHTML('beforeend', `<option value="${i}">Through season ${i}${i === n ? ' (latest)' : ''}</option>`);
+      sel.value = sel.dataset.current || '';
+    } catch (e) { console.error(e); }
+  }
+}
+new MutationObserver(() => fillSeasons()).observe(document.getElementById('app'), { childList: true, subtree: true });
 
 // ---------------------------------------------------------------- state
 
@@ -247,7 +263,7 @@ actions.finishWelcome = async () => {
 
 async function viewFeed() {
   const { data: rows } = await sb.from('ratings')
-    .select('user_id, title_id, rating, note, source, activity_at, titles(id, name, year, media_type, poster_path)')
+    .select('user_id, title_id, rating, note, season, source, activity_at, titles(id, name, year, media_type, poster_path)')
     .order('activity_at', { ascending: false }).limit(400);
 
   // Quick-pick ratings without a note become one summary line per person.
@@ -299,7 +315,7 @@ function feedCard(c, saved) {
       ${shown.map((r) => reviewHtml(r, true)).join('')}
       ${more > 0 ? `<a class="small" href="${titleLink(t)}">+${more} more</a>` : ''}
       <div class="row actions" style="margin-top:4px">
-        ${mine ? `<span class="muted">You: <strong>${RATING[mine.rating]}</strong></span> <a class="small" href="${titleLink(t)}">Edit</a>`
+        ${mine ? `<span class="muted">You: <strong>${ratingLabel(mine)}</strong></span> <a class="small" href="${titleLink(t)}">Edit</a>`
           : `${saved.has(t.id) ? '<span class="muted">On your list</span>'
               : `<button class="primary" data-act="save" data-id="${esc(t.id)}">+ Want to watch</button>`}
              <button data-act="seenIt" data-id="${esc(t.id)}">Seen it</button>`}
@@ -309,7 +325,7 @@ function feedCard(c, saved) {
 
 function reviewHtml(r, withThanks) {
   return `<div class="review">
-    <div class="who"><strong>${esc(nameOf(r.user_id))}</strong> · ${RATING[r.rating]} · ${when(r.activity_at)}
+    <div class="who"><strong>${esc(nameOf(r.user_id))}</strong> · ${ratingLabel(r)} · ${when(r.activity_at)}
       ${withThanks && !isMe(r.user_id) && POSITIVE.includes(r.rating) ? ` · <button class="link small" data-act="thanks" data-user="${r.user_id}" data-id="${esc(r.title_id)}">Thanks</button>` : ''}</div>
     ${r.note ? `<div class="note">“${esc(r.note)}”</div>` : ''}</div>`;
 }
@@ -340,7 +356,7 @@ actions.thanks = async (d, el) => {
 async function viewTitle(id) {
   const [{ data: t }, { data: rs }, { data: wl }] = await Promise.all([
     sb.from('titles').select('*').eq('id', id).single(),
-    sb.from('ratings').select('user_id, title_id, rating, note, activity_at').eq('title_id', id).order('activity_at', { ascending: false }),
+    sb.from('ratings').select('user_id, title_id, rating, note, season, activity_at').eq('title_id', id).order('activity_at', { ascending: false }),
     sb.from('watchlist').select('title_id, watched_at').eq('title_id', id).maybeSingle(),
   ]);
   if (!t) { $app.innerHTML = '<p class="empty">Title not found.</p>'; return; }
@@ -363,7 +379,7 @@ async function viewTitle(id) {
     <h2>Your rating</h2>
     ${mine ? `
       <div class="card" id="myReview">
-        <div class="spread"><span><strong>${RATING[mine.rating]}</strong> <span class="muted">· ${when(mine.activity_at)}</span></span>
+        <div class="spread"><span><strong>${ratingLabel(mine)}</strong> <span class="muted">· ${when(mine.activity_at)}</span></span>
           <button class="link" data-act="editReview">Edit review</button></div>
         ${mine.note ? `<div class="note">“${esc(mine.note)}”</div>` : '<p class="muted">No note.</p>'}
       </div>
@@ -380,6 +396,8 @@ function ratingForm(mine, titleId, saveLabel = 'Save') {
   return `<form class="field" data-title="${esc(titleId)}" id="rate">
     <div class="ratings">${Object.entries(RATING).map(([k, v]) =>
       `<button type="button" class="${mine?.rating === k ? 'on' : ''}" data-act="pickRating" data-val="${k}" aria-pressed="${mine?.rating === k}">${v}</button>`).join('')}</div>
+    ${titleId.startsWith('tv:') ? `<label for="season">How far did you get?</label>
+    <select id="season" class="season" data-title="${esc(titleId)}" data-current="${mine?.season ?? ''}"><option value="">Whole show</option></select>` : ''}
     <label for="note">One-line note (optional)</label>
     <input id="note" maxlength="200" value="${esc(mine?.note)}" placeholder="What should friends know?">
     <p class="muted">Loved and Liked put this in friends’ feeds. You can change your rating anytime.</p>
@@ -409,7 +427,11 @@ actions.saveRating = async (d, el) => {
   el.disabled = true;
   const titleId = form.dataset.title;
   const note = form.querySelector('#note').value.trim() || null;
-  const { error } = await sb.from('ratings').upsert({ user_id: state.me.id, title_id: titleId, rating, note, source: form.dataset.source || 'search' });
+  const seasonVal = form.querySelector('#season')?.value;
+  const season = seasonVal ? Number(seasonVal) : null;
+  const row = { user_id: state.me.id, title_id: titleId, rating, note, season, source: form.dataset.source || 'search' };
+  let { error } = await sb.from('ratings').upsert(row);
+  if (error && /season/i.test(error.message)) { delete row.season; ({ error } = await sb.from('ratings').upsert(row)); } // before the seasons update is installed
   if (error) { el.disabled = false; throw error; }
   await sb.from('watchlist').update({ watched_at: new Date().toISOString() }).eq('title_id', titleId).is('watched_at', null);
   toast('Saved');
@@ -453,7 +475,7 @@ async function viewAdd() {
 actions.chooseTitle = async (d) => {
   const t = await ensureTitle(d.id);
   if (!t) return toast('Couldn’t load that title. Try again.');
-  const { data: mine } = await sb.from('ratings').select('rating, note').eq('title_id', d.id).eq('user_id', state.me.id).maybeSingle();
+  const { data: mine } = await sb.from('ratings').select('rating, note, season').eq('title_id', d.id).eq('user_id', state.me.id).maybeSingle();
   await loadProviders([d.id]);
   $app.innerHTML = `
     <button class="link" data-act="backToAdd">← Search again</button>
@@ -681,7 +703,7 @@ async function viewFriend(id, filter = 'positive') {
   await loadPeople();
   const p = state.people.get(id);
   if (!p) { $app.innerHTML = '<p class="empty">Not found.</p>'; return; }
-  const { data: rs } = await sb.from('ratings').select('user_id, title_id, rating, note, activity_at, titles(*)').eq('user_id', id).order('activity_at', { ascending: false });
+  const { data: rs } = await sb.from('ratings').select('user_id, title_id, rating, note, season, activity_at, titles(*)').eq('user_id', id).order('activity_at', { ascending: false });
   const shown = (rs ?? []).filter((r) => filter === 'all' || POSITIVE.includes(r.rating));
   await loadProviders(shown.map((r) => r.title_id));
   const svcNames = (state.services ?? []).filter((s) => s.ids.some((i) => (p.services ?? []).includes(i))).map((s) => s.name);
@@ -694,7 +716,7 @@ async function viewFriend(id, filter = 'positive') {
     ${shown.length ? shown.map((r) => `<div class="card pick">
       <a href="${titleLink(r.titles)}">${poster(r.titles.poster_path, 'sm')}</a>
       <div class="pick-body"><a class="title" href="${titleLink(r.titles)}">${esc(r.titles.name)}</a>
-        <span class="muted">${RATING[r.rating]} · ${kind(r.titles)}</span>${watchOn(r.title_id)}
+        <span class="muted">${ratingLabel(r)} · ${kind(r.titles)}</span>${watchOn(r.title_id)}
         ${r.note ? `<div class="note">“${esc(r.note)}”</div>` : ''}</div>
       ${isMe(id) ? '' : `<button aria-label="Add to Want to watch" data-act="save" data-id="${esc(r.title_id)}">+</button>`}</div>`).join('')
       : '<p class="empty">Nothing here yet.</p>'}
@@ -707,6 +729,19 @@ actions.removeFriend = async (d) => {
   await sb.from('connections').delete().eq('user_a', a).eq('user_b', b);
   state.me = null; location.hash = '#/me';
 };
+
+// ---------------------------------------------------------------- updates
+(async () => {
+  try {
+    const mine = new URL(import.meta.url).searchParams.get('v');
+    const html = await (await fetch(`./index.html?check=${Date.now()}`, { cache: 'no-store' })).text();
+    const latest = html.match(/app\.js\?v=(\d+)/)?.[1];
+    if (mine && latest && latest !== mine && sessionStorage.getItem('tv_reloaded') !== latest) {
+      sessionStorage.setItem('tv_reloaded', latest);
+      location.replace(`${location.pathname}?v=${latest}${location.hash}`);
+    }
+  } catch {}
+})();
 
 // ---------------------------------------------------------------- start
 

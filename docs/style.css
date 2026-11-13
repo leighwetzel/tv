@@ -73,3 +73,4 @@ nav a .dot { position: absolute; top: 4px; left: calc(50% + 8px); width: 8px; he
 nav[hidden] { display: none; }
 .list > button.link { display: block; width: 100%; text-align: left; padding: 12px; min-height: 44px; }
 .pick > button { align-self: center; min-width: 44px; }
+select { width: 100%; min-height: 48px; border: 1px solid var(--mid); border-radius: 10px; padding: 0 12px; font: 400 16px Inter, sans-serif; background: var(--card); color: var(--ink); }
