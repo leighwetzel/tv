@@ -48,6 +48,7 @@ const kind = (t) => `${t.media_type === 'tv' ? 'TV' : 'Movie'}${t.year ? ' · ' 
 const BRAND = `<header class="brand">
   <svg class="logo" viewBox="0 0 64 64" aria-hidden="true"><rect width="64" height="64" rx="15" fill="currentColor"/><rect x="10" y="15" width="44" height="31" rx="5" fill="none" stroke="#fff" stroke-width="4"/><path d="M24 54h16" stroke="#fff" stroke-width="4" stroke-linecap="round"/><path d="M32 39c-6-4-9-7-9-11a4.5 4.5 0 0 1 9-1.5 4.5 4.5 0 0 1 9 1.5c0 4-3 7-9 11z" fill="#fff"/></svg>
   <div><h1>tv</h1><p class="tagline">Picks from friends and family</p></div></header>`;
+const personLink = (id) => `<a class="person" href="#/friend/${encodeURIComponent(id)}">${esc(nameOf(id))}</a>`;
 const titleLink = (t) => `#/title/${encodeURIComponent(t.id)}`;
 
 function when(ts) {
@@ -333,7 +334,7 @@ function feedCard(c, saved) {
 
 function reviewHtml(r, withThanks) {
   return `<div class="review">
-    <div class="who"><strong>${esc(nameOf(r.user_id))}</strong> <span class="pill">${ratingLabel(r)}</span> <span class="when">${when(r.activity_at)}</span>
+    <div class="who">${personLink(r.user_id)} <span class="pill">${ratingLabel(r)}</span> <span class="when">${when(r.activity_at)}</span>
       ${withThanks && !isMe(r.user_id) && POSITIVE.includes(r.rating) ? `<button class="link small" data-act="thanks" data-user="${r.user_id}" data-id="${esc(r.title_id)}">Thanks</button>` : ''}</div>
     ${r.note ? `<div class="note">“${esc(r.note)}”</div>` : ''}</div>`;
 }
@@ -600,11 +601,11 @@ async function viewList() {
     <div class="seg">${seg('listSvc', 'all', 'All')}${seg('listSvc', 'mine', 'On my services')}</div>
     <div class="seg">${seg('listType', 'all', 'All')}${seg('listType', 'tv', 'TV')}${seg('listType', 'movie', 'Movies')}</div>
     ${items.length ? items.map((r) => {
-      const from = r.watchlist_credits.map((c) => esc(nameOf(c.recommender_id)));
+      const from = r.watchlist_credits.map((c) => personLink(c.recommender_id));
       return `<div class="card pick">
         <a href="${titleLink(r.titles)}">${poster(r.titles.poster_path, 'sm')}</a>
         <div class="pick-body"><a class="title" href="${titleLink(r.titles)}">${esc(r.titles.name)}</a>
-          <span class="muted">${from.length ? 'from <strong>' + from.join(', ') + '</strong>' : 'added by you'}</span>
+          <span class="muted">${from.length ? 'from ' + from.join(', ') : 'added by you'}</span>
           ${watchOn(r.title_id)}</div>
         <button data-act="watched" data-id="${esc(r.title_id)}">Watched</button></div>`;
     }).join('') : `<p class="empty">${state.listSvc === 'mine' && (rows ?? []).length ? 'Nothing on your services. Try “All”.' : 'Nothing saved yet. Tap “+ Want to watch” on a friend’s pick.'}</p>`}`;
@@ -637,7 +638,7 @@ async function viewMe() {
       <button class="primary" data-act="saveName">Save</button></div></div>
     <h2>Activity</h2>
     ${acts?.length ? `<div class="list">${acts.map((a) => `<div class="${a.read_at ? '' : 'unread'}">
-      <strong>${esc(nameOf(a.actor_id))}</strong> ${actText[a.kind]} ${a.titles ? `<a href="#/title/${encodeURIComponent(a.title_id)}">${esc(a.titles.name)}</a>` : ''} <span class="muted">· ${when(a.created_at)}</span></div>`).join('')}</div>`
+      ${personLink(a.actor_id)} ${actText[a.kind]} ${a.titles ? `<a href="#/title/${encodeURIComponent(a.title_id)}">${esc(a.titles.name)}</a>` : ''} <span class="muted">· ${when(a.created_at)}</span></div>`).join('')}</div>`
       : '<p class="muted">Nothing yet. When friends save or thank your picks, it shows here.</p>'}
     <h2>My services</h2>
     <p class="muted">Used for the My services filter and highlights.</p>
@@ -708,27 +709,30 @@ function viewAbout() {
 
 // ---------------------------------------------------------------- friend profile
 
-async function viewFriend(id, filter = 'positive') {
+async function viewFriend(id, filter) {
   await loadPeople();
   const p = state.people.get(id);
   if (!p) { $app.innerHTML = '<p class="empty">Not found.</p>'; return; }
   const { data: rs } = await sb.from('ratings').select('user_id, title_id, rating, note, season, activity_at, titles(*)').eq('user_id', id).order('activity_at', { ascending: false });
-  const shown = (rs ?? []).filter((r) => filter === 'all' || POSITIVE.includes(r.rating));
+  const count = (k) => (rs ?? []).filter((r) => r.rating === k).length;
+  const tabs = POSITIVE.filter((k) => count(k)); // Loved and Liked show only if not empty
+  if (filter !== 'all' && !tabs.includes(filter)) filter = tabs[0] ?? 'all';
+  const shown = (rs ?? []).filter((r) => filter === 'all' || r.rating === filter);
+  const segBtn = (val, label) => `<button class="${filter === val ? 'on' : ''}" data-act="friendFilter" data-id="${id}" data-val="${val}" aria-pressed="${filter === val}">${label}</button>`;
   await loadProviders(shown.map((r) => r.title_id));
   const svcNames = (state.services ?? []).filter((s) => s.ids.some((i) => (p.services ?? []).includes(i))).map((s) => s.name);
   $app.innerHTML = `
     <a href="javascript:history.back()">← Back</a>
     <h1>${esc(isMe(id) ? 'My picks' : p.name)}</h1>
     <span class="muted">${(rs ?? []).length} ratings${svcNames.length && !isMe(id) ? ' · watches on ' + esc(svcNames.join(', ')) : ''}</span>
-    <div class="seg"><button class="${filter === 'positive' ? 'on' : ''}" data-act="friendFilter" data-id="${id}" data-val="positive">Loved & Liked</button>
-      <button class="${filter === 'all' ? 'on' : ''}" data-act="friendFilter" data-id="${id}" data-val="all">All</button></div>
-    ${shown.length ? shown.map((r) => `<div class="card pick">
+    ${tabs.length ? `<div class="seg" role="group" aria-label="Rating">${tabs.map((k) => segBtn(k, RATING[k])).join('')}${segBtn('all', 'All')}</div>` : ''}
+    ${shown.length ? shown.map((r) => `<div class="card pick-card"><div class="pick">
       <a href="${titleLink(r.titles)}">${poster(r.titles.poster_path, 'sm')}</a>
       <div class="pick-body"><a class="title" href="${titleLink(r.titles)}">${esc(r.titles.name)}</a>
-        <span class="muted">${ratingLabel(r)} · ${kind(r.titles)}</span>${watchOn(r.title_id)}
-        ${r.note ? `<div class="note">“${esc(r.note)}”</div>` : ''}</div>
-      ${isMe(id) ? '' : `<button aria-label="Add to Want to watch" data-act="save" data-id="${esc(r.title_id)}">+</button>`}</div>`).join('')
-      : '<p class="empty">Nothing here yet.</p>'}
+        <span class="muted">${filter === 'all' ? ratingLabel(r) + ' · ' : ''}${kind(r.titles)}${filter !== 'all' && r.season ? ' · S' + r.season : ''}</span>${watchOn(r.title_id)}
+        ${r.note ? `<div class="note">“${esc(r.note)}”</div>` : ''}</div></div>
+      ${isMe(id) ? '' : `<div class="row actions"><button class="primary" data-act="save" data-id="${esc(r.title_id)}">+ Want to watch</button></div>`}</div>`).join('')
+      : `<p class="empty">${filter === 'all' ? 'Nothing rated yet.' : `No ${RATING[filter]} titles yet.`}</p>`}
     ${!isMe(id) && !p.is_host ? `<button class="link danger" data-act="removeFriend" data-id="${id}">Remove ${esc(p.name)} as a friend</button>` : ''}`;
 }
 actions.friendFilter = (d) => viewFriend(d.id, d.val);

@@ -52,7 +52,8 @@ label { font-size: calc(var(--base) - 2px); color: var(--muted); font-weight: 70
 .title { font-weight: 700; font-size: calc(var(--base) + 4px); line-height: 1.15; color: var(--ink); text-decoration: none; }
 .review { border-top: 1px solid var(--line); padding-top: 10px; margin-top: 10px; }
 .review .who { display: flex; flex-wrap: wrap; align-items: center; column-gap: 8px; row-gap: 0; }
-.review .who strong { font-size: var(--base); color: var(--ink); }
+a.person { color: var(--ink); font-weight: 700; text-decoration: underline; text-decoration-color: var(--mid); text-decoration-thickness: 2px; text-underline-offset: 4px; }
+.review .who a.person { font-size: var(--base); min-height: 44px; display: inline-flex; align-items: center; }
 .pill { font-size: calc(var(--base) - 3px); font-weight: 700; color: var(--accent); background: var(--accent-tint); padding: 1px 9px; border-radius: 999px; }
 .when { font-size: calc(var(--base) - 3px); color: var(--muted); }
 .note { font-size: var(--base); font-style: italic; }
