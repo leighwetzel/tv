@@ -298,16 +298,42 @@ async function viewFeed() {
 
   $app.innerHTML = `
     ${BRAND}
-    <div class="seg" role="group" aria-label="Type">
-      ${seg('feedType', 'all', 'All')}${seg('feedType', 'tv', 'TV')}${seg('feedType', 'movie', 'Movies')}</div>
-    <div class="seg" role="group" aria-label="Services">
-      ${seg('feedSvc', 'all', 'All services')}${seg('feedSvc', 'mine', 'My services')}</div>
+    ${filterBar('feed')}
     ${[...summary].map(([id, n]) => `<p class="muted"><a href="#/friend/${id}">${esc(nameOf(id))}</a> rated ${n} title${n > 1 ? 's' : ''} in quick-pick this week</p>`).join('')}
     ${list.length ? list.map((c) => feedCard(c, saved)).join('') : `<p class="empty">No picks yet. ${state.people.size <= 1 ? 'Once friends join, their picks show up here.' : 'Rate something to get things going.'}</p>`}`;
 }
 
-const seg = (key, val, label) => `<button class="${state[key] === val ? 'on' : ''}" data-act="seg" data-key="${key}" data-val="${val}" aria-pressed="${state[key] === val}">${label}</button>`;
-actions.seg = (d) => { state[d.key] = d.val; route(); };
+// Filters: one "Showing … / Filter" line; the choices slide up in a panel.
+const TYPE = ['Show', [['all', 'All'], ['tv', 'TV'], ['movie', 'Movies']]];
+const FILTERS = {
+  feed: [['feedType', ...TYPE], ['feedSvc', 'Services', [['all', 'All services'], ['mine', 'My services']]]],
+  list: [['listSvc', 'Services', [['all', 'All services'], ['mine', 'On my services']]], ['listType', ...TYPE]],
+};
+const FILTER_ICON = '<svg aria-hidden="true" viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M4 7h16M7 12h10M10 17h4"/></svg>';
+function filterBar(name) {
+  const groups = FILTERS[name];
+  const active = groups.filter(([key]) => state[key] !== 'all').map(([key, , opts]) => opts.find(([v]) => v === state[key])[1]);
+  return `<div class="filterbar"><span class="muted">Showing: <strong>${active.length ? active.join(' · ') : 'Everything'}</strong></span>
+      <button class="${active.length ? 'on' : ''}" data-act="openFilters" aria-haspopup="dialog">${FILTER_ICON} Filter</button></div>
+    <div class="sheet-backdrop" data-act="closeFilters"></div>
+    <div class="sheet" role="dialog" aria-modal="true" aria-labelledby="sheetTitle" tabindex="-1">
+      <h2 id="sheetTitle">Filter</h2>
+      ${groups.map(([key, label, opts]) => `<div class="field"><label>${label}</label><div class="seg" role="group" aria-label="${label}">
+        ${opts.map(([v, l]) => `<button class="${state[key] === v ? 'on' : ''}" data-act="pickFilter" data-key="${key}" data-val="${v}" aria-pressed="${state[key] === v}">${l}</button>`).join('')}</div></div>`).join('')}
+      <button class="primary big" data-act="closeFilters">Done</button>
+    </div>`;
+}
+let filtersChanged = false;
+actions.openFilters = () => { document.body.classList.add('sheet-open'); document.querySelector('.sheet')?.focus(); };
+actions.pickFilter = (d, el) => {
+  state[d.key] = d.val; filtersChanged = true;
+  el.parentElement.querySelectorAll('button').forEach((b) => { b.classList.toggle('on', b === el); b.setAttribute('aria-pressed', b === el); });
+};
+actions.closeFilters = () => {
+  document.body.classList.remove('sheet-open');
+  if (filtersChanged) { filtersChanged = false; route(); }
+};
+document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && document.body.classList.contains('sheet-open')) actions.closeFilters(); });
 
 function feedCard(c, saved) {
   const t = c.title, shown = c.reviews.slice(0, 2), more = c.reviews.length - shown.length;
@@ -598,8 +624,7 @@ async function viewList() {
   if (state.listSvc === 'mine') items = items.filter((r) => onMyServices(r.title_id));
   $app.innerHTML = `
     <h1>Want to watch</h1>
-    <div class="seg">${seg('listSvc', 'all', 'All')}${seg('listSvc', 'mine', 'On my services')}</div>
-    <div class="seg">${seg('listType', 'all', 'All')}${seg('listType', 'tv', 'TV')}${seg('listType', 'movie', 'Movies')}</div>
+    ${filterBar('list')}
     ${items.length ? items.map((r) => {
       const from = r.watchlist_credits.map((c) => personLink(c.recommender_id));
       return `<div class="card pick">
@@ -714,6 +739,12 @@ async function viewFriend(id, filter) {
   const p = state.people.get(id);
   if (!p) { $app.innerHTML = '<p class="empty">Not found.</p>'; return; }
   const { data: rs } = await sb.from('ratings').select('user_id, title_id, rating, note, season, activity_at, titles(*)').eq('user_id', id).order('activity_at', { ascending: false });
+  const [{ data: wl }, { data: myR }] = await Promise.all([
+    sb.from('watchlist').select('title_id').is('watched_at', null),
+    sb.from('ratings').select('title_id, rating, season').eq('user_id', state.me.id),
+  ]);
+  const saved = new Set((wl ?? []).map((w) => w.title_id));
+  const myRating = new Map((myR ?? []).map((r) => [r.title_id, r]));
   const count = (k) => (rs ?? []).filter((r) => r.rating === k).length;
   const tabs = POSITIVE.filter((k) => count(k)); // Loved and Liked show only if not empty
   if (filter !== 'all' && !tabs.includes(filter)) filter = tabs[0] ?? 'all';
@@ -731,7 +762,9 @@ async function viewFriend(id, filter) {
       <div class="pick-body"><a class="title" href="${titleLink(r.titles)}">${esc(r.titles.name)}</a>
         <span class="muted">${filter === 'all' ? ratingLabel(r) + ' · ' : ''}${kind(r.titles)}${filter !== 'all' && r.season ? ' · S' + r.season : ''}</span>${watchOn(r.title_id)}
         ${r.note ? `<div class="note">“${esc(r.note)}”</div>` : ''}</div></div>
-      ${isMe(id) ? '' : `<div class="row actions"><button class="primary" data-act="save" data-id="${esc(r.title_id)}">+ Want to watch</button></div>`}</div>`).join('')
+      ${isMe(id) ? '' : `<div class="row actions">${myRating.has(r.title_id) ? `<span class="muted">You: <strong>${ratingLabel(myRating.get(r.title_id))}</strong></span>`
+        : saved.has(r.title_id) ? '<span class="muted">On your list</span>'
+        : `<button class="primary" data-act="save" data-id="${esc(r.title_id)}">+ Want to watch</button>`}</div>`}</div>`).join('')
       : `<p class="empty">${filter === 'all' ? 'Nothing rated yet.' : `No ${RATING[filter]} titles yet.`}</p>`}
     ${!isMe(id) && !p.is_host ? `<button class="link danger" data-act="removeFriend" data-id="${id}">Remove ${esc(p.name)} as a friend</button>` : ''}`;
 }
