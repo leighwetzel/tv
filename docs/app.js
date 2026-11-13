@@ -135,7 +135,7 @@ function watchOn(id) {
   if (all.length) {
     const mine = all.filter(isMine);
     const names = (mine.length ? mine : all).slice(0, 2).map((s) => esc(s.name)).join(', ');
-    return `<span class="watch ${mine.length ? 'mine' : ''}">Watch on <strong>${names}</strong>${mine.length ? ' · yours' : ''}</span>`;
+    return `<span class="watch ${mine.length ? 'mine' : ''}">Watch on <strong>${names}${mine.length ? ' · yours' : ''}</strong></span>`;
   }
   if (p.rent?.length || p.buy?.length) return '<span class="watch muted">Rent or buy only</span>';
   return '<span class="watch muted">Not streaming in the US</span>';
@@ -308,27 +308,30 @@ actions.seg = (d) => { state[d.key] = d.val; route(); };
 function feedCard(c, saved) {
   const t = c.title, shown = c.reviews.slice(0, 2), more = c.reviews.length - shown.length;
   const mine = c.reviews.find((r) => isMe(r.user_id));
-  return `<article class="card pick">
-    <a href="${titleLink(t)}">${poster(t.poster_path)}</a>
-    <div class="pick-body">
-      <a class="title" href="${titleLink(t)}">${esc(t.name)}</a>
-      <span class="muted">${kind(t)}</span>
-      ${watchOn(t.id)}
+  return `<article class="card pick-card">
+    <div class="pick">
+      <a href="${titleLink(t)}">${poster(t.poster_path)}</a>
+      <div class="pick-body">
+        <a class="title" href="${titleLink(t)}">${esc(t.name)}</a>
+        <span class="muted">${kind(t)}</span>
+        ${watchOn(t.id)}
+      </div>
+    </div>
       ${shown.map((r) => reviewHtml(r, true)).join('')}
-      ${more > 0 ? `<a class="small" href="${titleLink(t)}">+${more} more</a>` : ''}
-      <div class="row actions" style="margin-top:4px">
+      ${more > 0 ? `<a class="small more" href="${titleLink(t)}">+${more} more</a>` : ''}
+      <div class="row actions">
         ${mine ? `<span class="muted">You: <strong>${ratingLabel(mine)}</strong></span> <a class="small" href="${titleLink(t)}">Edit</a>`
           : `${saved.has(t.id) ? '<span class="muted">On your list</span>'
               : `<button class="primary" data-act="save" data-id="${esc(t.id)}">+ Want to watch</button>`}
              <button data-act="seenIt" data-id="${esc(t.id)}">Seen it</button>`}
       </div>
-    </div></article>`;
+    </article>`;
 }
 
 function reviewHtml(r, withThanks) {
   return `<div class="review">
-    <div class="who"><strong>${esc(nameOf(r.user_id))}</strong> · ${ratingLabel(r)} · ${when(r.activity_at)}
-      ${withThanks && !isMe(r.user_id) && POSITIVE.includes(r.rating) ? ` · <button class="link small" data-act="thanks" data-user="${r.user_id}" data-id="${esc(r.title_id)}">Thanks</button>` : ''}</div>
+    <div class="who"><strong>${esc(nameOf(r.user_id))}</strong> <span class="pill">${ratingLabel(r)}</span> <span class="when">${when(r.activity_at)}</span>
+      ${withThanks && !isMe(r.user_id) && POSITIVE.includes(r.rating) ? `<button class="link small" data-act="thanks" data-user="${r.user_id}" data-id="${esc(r.title_id)}">Thanks</button>` : ''}</div>
     ${r.note ? `<div class="note">“${esc(r.note)}”</div>` : ''}</div>`;
 }
 
@@ -351,7 +354,7 @@ actions.save = async (d, el) => {
 actions.thanks = async (d, el) => {
   el.disabled = true;
   await sb.from('reactions').upsert({ from_user: state.me.id, to_user: d.user, title_id: d.id }, { ignoreDuplicates: true });
-  el.outerHTML = '<span>Thanked</span>';
+  el.outerHTML = '<span class="when">Thanked</span>';
 };
 
 // ---------------------------------------------------------------- title page
