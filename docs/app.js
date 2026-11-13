@@ -49,6 +49,7 @@ const BRAND = `<header class="brand">
   <svg class="logo" viewBox="0 0 64 64" aria-hidden="true"><rect width="64" height="64" rx="15" fill="currentColor"/><rect x="10" y="15" width="44" height="31" rx="5" fill="none" stroke="#fff" stroke-width="4"/><path d="M24 54h16" stroke="#fff" stroke-width="4" stroke-linecap="round"/><path d="M32 39c-6-4-9-7-9-11a4.5 4.5 0 0 1 9-1.5 4.5 4.5 0 0 1 9 1.5c0 4-3 7-9 11z" fill="#fff"/></svg>
   <div><h1>tv</h1><p class="tagline">Picks from friends and family</p></div></header>`;
 const personLink = (id) => `<a class="person" href="#/friend/${encodeURIComponent(id)}">${esc(nameOf(id))}</a>`;
+const SAVED = '<span class="btn saved">✓ Saved</span>'; // shown in place of + Want to watch once a title is on your list
 const titleLink = (t) => `#/title/${encodeURIComponent(t.id)}`;
 
 function when(ts) {
@@ -351,7 +352,7 @@ function feedCard(c, saved) {
       ${more > 0 ? `<a class="small more" href="${titleLink(t)}">+${more} more</a>` : ''}
       <div class="row actions">
         ${mine ? `<span class="muted">You: <strong>${ratingLabel(mine)}</strong></span> <a class="small" href="${titleLink(t)}">Edit</a>`
-          : `${saved.has(t.id) ? '<span class="muted">On your list</span>'
+          : `${saved.has(t.id) ? SAVED
               : `<button class="primary" data-act="save" data-id="${esc(t.id)}">+ Want to watch</button>`}
              <button data-act="seenIt" data-id="${esc(t.id)}">Seen it</button>`}
       </div>
@@ -367,7 +368,7 @@ function reviewHtml(r, withThanks) {
 
 actions.seenIt = (d, el) => {
   const box = el.closest('.actions');
-  box.outerHTML = `<div class="field" style="margin-top:6px;width:100%">${ratingForm(null, d.id).replace('<form ', '<form data-after="#/feed" ')}
+  box.outerHTML = `<div class="field" style="margin-top:6px;width:100%">${ratingForm(null, d.id).replace('<form ', `<form data-after="${esc(location.hash || '#/feed')}" `)}
     <button class="link" type="button" data-act="cancelSeen">Cancel</button></div>`;
 };
 actions.cancelSeen = () => route();
@@ -378,7 +379,7 @@ actions.save = async (d, el) => {
   const { error: wErr } = await sb.from('watchlist').upsert({ user_id: state.me.id, title_id: d.id, watched_at: null });
   if (wErr) { el.disabled = false; throw wErr; }
   if (recs.length) await sb.from('watchlist_credits').upsert(recs.map((rid) => ({ user_id: state.me.id, title_id: d.id, recommender_id: rid })), { ignoreDuplicates: true });
-  el.outerHTML = '<span class="muted">On your list</span>';
+  el.outerHTML = SAVED;
   toast('Saved to your list');
 };
 actions.thanks = async (d, el) => {
@@ -404,7 +405,7 @@ async function viewTitle(id) {
     <a href="javascript:history.back()">← Back</a>
     <div class="pick">${poster(t.poster_path, 'lg')}
       <div class="pick-body"><h1>${esc(t.name)}</h1><span class="muted">${kind(t)}</span>
-        ${mine ? '' : wl && !wl.watched_at ? '<span class="muted">On your list</span>' : `<button class="primary" data-act="save" data-id="${esc(id)}">+ Want to watch</button>`}
+        ${mine ? '' : wl && !wl.watched_at ? SAVED : `<button class="primary" data-act="save" data-id="${esc(id)}">+ Want to watch</button>`}
       </div></div>
     <section class="card watchbox">
       <div class="muted small">WATCH ON</div>
@@ -763,8 +764,9 @@ async function viewFriend(id, filter) {
         <span class="muted">${filter === 'all' ? ratingLabel(r) + ' · ' : ''}${kind(r.titles)}${filter !== 'all' && r.season ? ' · S' + r.season : ''}</span>${watchOn(r.title_id)}
         ${r.note ? `<div class="note">“${esc(r.note)}”</div>` : ''}</div></div>
       ${isMe(id) ? '' : `<div class="row actions">${myRating.has(r.title_id) ? `<span class="muted">You: <strong>${ratingLabel(myRating.get(r.title_id))}</strong></span>`
-        : saved.has(r.title_id) ? '<span class="muted">On your list</span>'
-        : `<button class="primary" data-act="save" data-id="${esc(r.title_id)}">+ Want to watch</button>`}</div>`}</div>`).join('')
+        : saved.has(r.title_id) ? SAVED
+        : `<button class="primary" data-act="save" data-id="${esc(r.title_id)}">+ Want to watch</button>`}
+        ${myRating.has(r.title_id) ? '' : `<button data-act="seenIt" data-id="${esc(r.title_id)}">Seen it</button>`}</div>`}</div>`).join('')
       : `<p class="empty">${filter === 'all' ? 'Nothing rated yet.' : `No ${RATING[filter]} titles yet.`}</p>`}
     ${!isMe(id) && !p.is_host ? `<button class="link danger" data-act="removeFriend" data-id="${id}">Remove ${esc(p.name)} as a friend</button>` : ''}`;
 }

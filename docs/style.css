@@ -62,7 +62,9 @@ a.person { color: var(--ink); font-weight: 700; text-decoration: underline; text
 .watch.mine strong { color: var(--accent); background: var(--accent-tint); padding: 1px 9px; border-radius: 999px; white-space: nowrap; }
 a.more { align-self: flex-start; min-height: 44px; display: inline-flex; align-items: center; margin-top: 2px; }
 .actions { margin-top: 10px; gap: 8px; }
-.actions button { flex: 1 1 200px; }
+.actions button { flex: 1 1 auto; padding: 0 14px; white-space: nowrap; }
+.actions button.primary, .actions .saved { flex-grow: 2; }
+.btn.saved { background: var(--soft); border-color: var(--soft); color: var(--muted); cursor: default; white-space: nowrap; padding: 0 14px; }
 .actions a { min-height: 44px; display: inline-flex; align-items: center; }
 .list { background: var(--card); border: 1.5px solid var(--line); border-radius: 14px; }
 .list > * { padding: 12px 14px; border-top: 1px solid var(--line); margin-top: 0; }
