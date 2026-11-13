@@ -93,7 +93,7 @@ a.more { align-self: flex-start; min-height: 44px; display: inline-flex; align-i
 
 /* Filter line and slide-up panel */
 .filterbar { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
-.filterbar .muted { font-size: calc(var(--base) - 1px); }
+.filterbar .muted { font-size: calc(var(--base) - 1px); flex: 1; min-width: 0; }
 .filterbar .muted strong { color: var(--ink); }
 .filterbar button { flex: none; min-height: 46px; padding: 0 16px; }
 .filterbar button.on { color: var(--accent); background: var(--accent-tint); border-color: var(--accent); }

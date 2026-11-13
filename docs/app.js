@@ -108,7 +108,7 @@ const state = {
   people: new Map(),      // id -> profile (me + connections)
   providers: new Map(),   // title id -> { flatrate, rent, buy }
   services: null,         // streaming service list from TMDB
-  feedType: 'all', feedSvc: 'all', listSvc: 'all', listType: 'all',
+  feedType: 'all', feedSvc: 'all', listSvc: 'all', listType: 'all', feedSort: 'review', listSort: 'added',
   qp: null,               // quick-pick round in progress
 };
 
@@ -293,6 +293,7 @@ async function viewFeed() {
   // Only titles you can stream right now (if streaming info didn't load, keep the card).
   list = list.filter((c) => !state.providers.has(c.title.id) || subs(c.title.id).length);
   if (state.feedSvc === 'mine') list = list.filter((c) => onMyServices(c.title.id));
+  if (state.feedSort === 'release') list.sort((a, b) => (b.title.year ?? 0) - (a.title.year ?? 0)); // same year keeps review order
 
   const { data: wl } = await sb.from('watchlist').select('title_id').is('watched_at', null);
   const saved = new Set((wl ?? []).map((w) => w.title_id));
@@ -307,18 +308,21 @@ async function viewFeed() {
 // Filters: one "Showing … / Filter" line; the choices slide up in a panel.
 const TYPE = ['Show', [['all', 'All'], ['tv', 'TV'], ['movie', 'Movies']]];
 const FILTERS = {
-  feed: [['feedType', ...TYPE], ['feedSvc', 'Services', [['all', 'All services'], ['mine', 'My services']]]],
-  list: [['listSvc', 'Services', [['all', 'All services'], ['mine', 'On my services']]], ['listType', ...TYPE]],
+  feed: [['feedType', ...TYPE], ['feedSvc', 'Services', [['all', 'All services'], ['mine', 'My services']]],
+    ['feedSort', 'Sort by', [['review', 'Latest reviews'], ['release', 'Newest releases']]]],
+  list: [['listSvc', 'Services', [['all', 'All services'], ['mine', 'On my services']]], ['listType', ...TYPE],
+    ['listSort', 'Sort by', [['added', 'Recently saved'], ['release', 'Newest releases']]]],
 };
 const FILTER_ICON = '<svg aria-hidden="true" viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M4 7h16M7 12h10M10 17h4"/></svg>';
 function filterBar(name) {
   const groups = FILTERS[name];
-  const active = groups.filter(([key]) => state[key] !== 'all').map(([key, , opts]) => opts.find(([v]) => v === state[key])[1]);
+  // The first option in each group is the default; anything else is listed in the "Showing" line.
+  const active = groups.filter(([key, , opts]) => state[key] !== opts[0][0]).map(([key, , opts]) => opts.find(([v]) => v === state[key])[1]);
   return `<div class="filterbar"><span class="muted">Showing: <strong>${active.length ? active.join(' · ') : 'Everything'}</strong></span>
-      <button class="${active.length ? 'on' : ''}" data-act="openFilters" aria-haspopup="dialog">${FILTER_ICON} Filter</button></div>
+      <button class="${active.length ? 'on' : ''}" data-act="openFilters" aria-haspopup="dialog">${FILTER_ICON} Filter &amp; sort</button></div>
     <div class="sheet-backdrop" data-act="closeFilters"></div>
     <div class="sheet" role="dialog" aria-modal="true" aria-labelledby="sheetTitle" tabindex="-1">
-      <h2 id="sheetTitle">Filter</h2>
+      <h2 id="sheetTitle">Filter and sort</h2>
       ${groups.map(([key, label, opts]) => `<div class="field"><label>${label}</label><div class="seg" role="group" aria-label="${label}">
         ${opts.map(([v, l]) => `<button class="${state[key] === v ? 'on' : ''}" data-act="pickFilter" data-key="${key}" data-val="${v}" aria-pressed="${state[key] === v}">${l}</button>`).join('')}</div></div>`).join('')}
       <button class="primary big" data-act="closeFilters">Done</button>
@@ -623,6 +627,7 @@ async function viewList() {
   await loadProviders(items.map((r) => r.title_id));
   if (state.listType !== 'all') items = items.filter((r) => r.titles.media_type === state.listType);
   if (state.listSvc === 'mine') items = items.filter((r) => onMyServices(r.title_id));
+  if (state.listSort === 'release') items.sort((a, b) => (b.titles.year ?? 0) - (a.titles.year ?? 0));
   $app.innerHTML = `
     <h1>Want to watch</h1>
     ${filterBar('list')}
