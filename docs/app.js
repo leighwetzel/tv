@@ -285,6 +285,8 @@ async function viewFeed() {
   let list = [...cards.values()].filter((c) => c.started);
   if (state.feedType !== 'all') list = list.filter((c) => c.title.media_type === state.feedType);
   await loadProviders(list.map((c) => c.title.id));
+  // Only titles you can stream right now (if streaming info didn't load, keep the card).
+  list = list.filter((c) => !state.providers.has(c.title.id) || subs(c.title.id).length);
   if (state.feedSvc === 'mine') list = list.filter((c) => onMyServices(c.title.id));
 
   const { data: wl } = await sb.from('watchlist').select('title_id').is('watched_at', null);
