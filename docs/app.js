@@ -158,7 +158,8 @@ window.addEventListener('hashchange', route);
 async function updateActivityDot() {
   const { count } = await sb.from('activity').select('id', { count: 'exact', head: true }).is('read_at', null);
   const me = $nav.querySelector('[data-tab=me]');
-  me.innerHTML = 'Me' + (count ? '<span class="dot" aria-label="new activity"></span>' : '');
+  me.querySelector('.dot')?.remove();
+  if (count) me.insertAdjacentHTML('beforeend', '<span class="dot" aria-label="new activity"></span>');
 }
 
 // ---------------------------------------------------------------- sign in
