@@ -566,7 +566,7 @@ async function viewMe() {
   $app.innerHTML = `
     <div><h1>${esc(state.me.name)}</h1><span class="muted">${nRatings ?? 0} ratings · ${friendIds.length} friends</span></div>
     <div class="field"><label for="myName">Your name, as friends see it</label>
-      <div class="row" style="flex-wrap:nowrap"><input id="myName" value="${esc(state.me.name)}" autocomplete="given-name">
+      <div class="row" style="flex-wrap:nowrap"><input id="myName" style="flex:1;min-width:0" value="${esc(state.me.name)}" autocomplete="given-name">
       <button class="primary" data-act="saveName">Save</button></div></div>
     <h2>Activity</h2>
     ${acts?.length ? `<div class="list">${acts.map((a) => `<div class="${a.read_at ? '' : 'unread'}">
