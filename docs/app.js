@@ -185,8 +185,7 @@ function viewSignIn(step = 'email', email = '') {
   } else {
     $app.innerHTML = `
       <h1>Check your email</h1>
-      <p class="muted">We emailed ${esc(email)}. Enter the 6-digit code from that email, or tap the sign-in link in it.</p>
-      <p class="muted small">Tip: the link signs you in only in the browser that opens it, so the code is the surest way.</p>
+      <p class="muted">We emailed a 6-digit code to ${esc(email)}. It can take a minute to arrive; check spam if you don’t see it.</p>
       <form id="f" class="field">
         <label for="code">Code</label>
         <input id="code" inputmode="numeric" autocomplete="one-time-code" maxlength="10" required>
