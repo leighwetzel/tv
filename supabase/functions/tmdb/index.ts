@@ -48,7 +48,9 @@ function toTitle(r: any, type?: 'tv' | 'movie'): Title | null {
 }
 
 async function saveTitles(titles: Title[]) {
-  if (titles.length) await admin.from('titles').upsert(titles.map((t) => ({ ...t, updated_at: new Date().toISOString() })));
+  if (!titles.length) return;
+  const { error } = await admin.from('titles').upsert(titles.map((t) => ({ ...t, updated_at: new Date().toISOString() })));
+  if (error) console.error('saveTitles', error.message);
 }
 
 function pickProviders(us: any) {
@@ -76,8 +78,29 @@ async function providersFor(ids: string[]) {
       out[id] = { flatrate: [], rent: [], buy: [], link: null };
     }
   }));
-  if (rows.length) await admin.from('title_providers').upsert(rows);
+  if (rows.length) {
+    const { error } = await admin.from('title_providers').upsert(rows);
+    if (error) console.error('save providers', error.message);
+  }
   return out;
+}
+
+// Rent/buy stores and aggregator listings: not subscriptions, never shown as services.
+const NOT_SERVICES = /justwatch|store|amazon video|google play|fandango|vudu|microsoft|spectrum|directv|^youtube$|plex channel/i;
+
+// "HBO Max Amazon Channel", "Netflix Standard with Ads", "Paramount Plus Premium" -> one clean name.
+export function serviceName(raw: string) {
+  let n = raw
+    .replace(/\s+(amazon|apple tv|roku premium|prime video)\s+channel$/i, '')
+    .replace(/\s+(standard|basic)?\s*with ads$/i, '')
+    .replace(/\s+(premium plus|premium|essential)$/i, '')
+    .trim();
+  const alias: Record<string, string> = {
+    'max': 'HBO Max', 'hbo max': 'HBO Max', 'disney plus': 'Disney+', 'paramount plus': 'Paramount+',
+    'amazon prime video': 'Prime Video', 'prime video': 'Prime Video', 'apple tv plus': 'Apple TV', 'apple tv+': 'Apple TV',
+    'peacock': 'Peacock', 'mgm plus': 'MGM+', 'amc plus': 'AMC+', 'starz': 'Starz',
+  };
+  return alias[n.toLowerCase()] ?? n;
 }
 
 async function services() {
@@ -85,14 +108,17 @@ async function services() {
     tmdb('/watch/providers/tv', { watch_region: REGION }),
     tmdb('/watch/providers/movie', { watch_region: REGION }),
   ]);
-  const seen = new Map<number, any>();
+  const groups = new Map<string, { name: string; ids: number[]; priority: number }>();
   for (const p of [...tv.results, ...movie.results]) {
+    if (NOT_SERVICES.test(p.provider_name)) continue;
+    const name = serviceName(p.provider_name);
     const prio = p.display_priorities?.[REGION] ?? p.display_priority ?? 999;
-    if (!seen.has(p.provider_id) || prio < seen.get(p.provider_id).priority) {
-      seen.set(p.provider_id, { id: p.provider_id, name: p.provider_name, logo: p.logo_path, priority: prio });
-    }
+    const g = groups.get(name) ?? { name, ids: [], priority: prio };
+    if (!g.ids.includes(p.provider_id)) g.ids.push(p.provider_id);
+    g.priority = Math.min(g.priority, prio);
+    groups.set(name, g);
   }
-  return [...seen.values()].sort((a, b) => a.priority - b.priority).slice(0, 30);
+  return [...groups.values()].sort((a, b) => a.priority - b.priority).slice(0, 24);
 }
 
 // One quick-pick batch: current popular titles plus all-time classics,

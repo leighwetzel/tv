@@ -13,6 +13,31 @@ const IMG = 'https://image.tmdb.org/t/p/';
 const RATING = { loved: 'Loved', liked: 'Liked', didnt_like: "Didn't like", gave_up: 'Gave up' };
 const POSITIVE = ['loved', 'liked'];
 const ROUND = 15;
+const NOT_SERVICES = /justwatch|store|amazon video|google play|fandango|vudu|microsoft|spectrum|directv|^youtube$|plex channel/i;
+function serviceName(raw) {
+  const n = String(raw)
+    .replace(/\s+(amazon|apple tv|roku premium|prime video)\s+channel$/i, '')
+    .replace(/\s+(standard|basic)?\s*with ads$/i, '')
+    .replace(/\s+(premium plus|premium|essential)$/i, '')
+    .trim();
+  const alias = { 'max': 'HBO Max', 'hbo max': 'HBO Max', 'disney plus': 'Disney+', 'paramount plus': 'Paramount+',
+    'amazon prime video': 'Prime Video', 'prime video': 'Prime Video', 'apple tv plus': 'Apple TV', 'apple tv+': 'Apple TV',
+    'mgm plus': 'MGM+', 'amc plus': 'AMC+' };
+  return alias[n.toLowerCase()] ?? n;
+}
+// Subscription services for a title, one entry per clean name.
+function subs(id) {
+  const p = state.providers.get(id);
+  const out = new Map();
+  for (const s of p?.flatrate ?? []) {
+    if (NOT_SERVICES.test(s.name)) continue;
+    const name = serviceName(s.name);
+    const e = out.get(name) ?? { name, ids: [] };
+    e.ids.push(s.id); out.set(name, e);
+  }
+  return [...out.values()];
+}
+const isMine = (svc) => svc.ids.some((i) => myServices().includes(i));
 
 const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 const poster = (path, cls = '') => path
@@ -86,16 +111,14 @@ async function loadProviders(ids) {
 }
 
 const myServices = () => state.me?.services ?? [];
-function onMyServices(id) {
-  const p = state.providers.get(id);
-  return !!p?.flatrate?.some((s) => myServices().includes(s.id));
-}
+function onMyServices(id) { return subs(id).some(isMine); }
 function watchOn(id) {
   const p = state.providers.get(id);
   if (!p) return '';
-  if (p.flatrate?.length) {
-    const mine = p.flatrate.filter((s) => myServices().includes(s.id));
-    const names = (mine.length ? mine : p.flatrate).slice(0, 2).map((s) => esc(s.name)).join(', ');
+  const all = subs(id);
+  if (all.length) {
+    const mine = all.filter(isMine);
+    const names = (mine.length ? mine : all).slice(0, 2).map((s) => esc(s.name)).join(', ');
     return `<span class="watch ${mine.length ? 'mine' : ''}">Watch on <strong>${names}</strong>${mine.length ? ' · yours' : ''}</span>`;
   }
   if (p.rent?.length || p.buy?.length) return '<span class="watch muted">Rent or buy only</span>';
@@ -193,26 +216,30 @@ async function redeemPendingInvite() {
 async function viewWelcome() {
   if (!state.services) state.services = (await fn('services')).services;
   const hosts = [...state.people.values()].filter((p) => p.is_host && !isMe(p.id)).map((p) => esc(p.name));
-  const chosen = new Set(myServices());
   $app.innerHTML = `
-    <div class="progress"><div style="width:50%"></div></div>
     <h1>Welcome to tv</h1>
     ${hosts.length ? `<p class="muted">You’re connected with ${hosts.join(' and ')}, and you’ll see their picks.</p>` : ''}
     <div class="field"><label for="name">Your name, as friends see it</label>
       <input id="name" value="${esc(state.me.name)}" autocomplete="given-name"></div>
     <h2>Which streaming services do you have?</h2>
-    <div class="row" id="svc">${state.services.slice(0, 16).map((s) =>
-      `<button class="chip ${chosen.has(s.id) ? 'on' : ''}" data-act="toggleSvc" data-id="${s.id}" aria-pressed="${chosen.has(s.id)}">${esc(s.name)}</button>`).join('')}</div>
-    <button class="primary big" data-act="finishWelcome">Next: rate a few titles</button>`;
+    <div class="row" id="svc">${serviceChips('toggleSvc')}</div>
+    <button class="primary big" data-act="finishWelcome">Done</button>`;
 }
+function serviceChips(act) {
+  return state.services.map((s) => {
+    const on = s.ids.some((i) => myServices().includes(i));
+    return `<button class="chip ${on ? 'on' : ''}" data-act="${act}" data-ids="${s.ids.join(',')}" aria-pressed="${on}">${esc(s.name)}</button>`;
+  }).join('');
+}
+const chosenServiceIds = () => [...document.querySelectorAll('#svc .chip.on')].flatMap((b) => b.dataset.ids.split(',').map(Number));
 actions.toggleSvc = (d, el) => { el.classList.toggle('on'); el.setAttribute('aria-pressed', el.classList.contains('on')); };
 actions.finishWelcome = async () => {
   const name = document.getElementById('name').value.trim() || state.me.name;
-  const services = [...document.querySelectorAll('#svc .chip.on')].map((b) => Number(b.dataset.id));
-  await sb.from('profiles').update({ name, services }).eq('id', state.me.id);
-  Object.assign(state.me, { name, services });
-  state.qp = null;
-  location.hash = '#/quickpick';
+  const services = chosenServiceIds();
+  await sb.from('profiles').update({ name, services, onboarded: true }).eq('id', state.me.id);
+  Object.assign(state.me, { name, services, onboarded: true });
+  location.hash = '#/add';
+  toast('All set. Add a show you loved.');
 };
 
 // ---------------------------------------------------------------- feed
@@ -319,8 +346,8 @@ async function viewTitle(id) {
       </div></div>
     <section class="card watchbox">
       <div class="muted small">WATCH ON</div>
-      ${p.flatrate?.length ? `<div class="row">${p.flatrate.map((s) => `<span class="chip ${myServices().includes(s.id) ? 'on' : ''}" style="display:inline-flex;align-items:center">${esc(s.name)}${myServices().includes(s.id) ? ' · yours' : ''}</span>`).join('')}</div>` : '<p>Not on a subscription service in the US right now.</p>'}
-      ${p.rent?.length || p.buy?.length ? `<p class="muted">Rent or buy: ${esc([...new Set([...(p.rent ?? []), ...(p.buy ?? [])].map((s) => s.name))].slice(0, 4).join(', '))}</p>` : ''}
+      ${subs(id).length ? `<div class="row">${subs(id).map((s) => `<span class="chip ${isMine(s) ? 'on' : ''}" style="display:inline-flex;align-items:center">${esc(s.name)}${isMine(s) ? ' · yours' : ''}</span>`).join('')}</div>` : '<p>Not on a subscription service in the US right now.</p>'}
+      ${p.rent?.length || p.buy?.length ? `<p class="muted">Rent or buy: ${esc([...new Set([...(p.rent ?? []), ...(p.buy ?? [])].map((s) => serviceName(s.name)))].slice(0, 4).join(', '))}</p>` : ''}
       <p class="credits">Streaming data from JustWatch</p>
     </section>
     <h2>Your rating</h2>
@@ -358,6 +385,15 @@ actions.saveRating = async (d, el) => {
 // ---------------------------------------------------------------- add
 
 let searchTimer;
+const searchCache = new Map();
+async function ensureTitle(id) {
+  const { data } = await sb.from('titles').select('*').eq('id', id).maybeSingle();
+  if (data) return data;
+  const t = searchCache.get(id);
+  if (!t) return null;
+  await sb.from('titles').insert(t);
+  return t;
+}
 async function viewAdd() {
   $app.innerHTML = `
     <h1>Add a title</h1>
@@ -372,6 +408,7 @@ async function viewAdd() {
       const box = document.getElementById('results');
       if (q.value.trim().length < 2) { box.innerHTML = ''; return; }
       const { results } = await fn('search', { q: q.value });
+      for (const t of results) searchCache.set(t.id, t);
       box.innerHTML = results.length ? `<div class="list">${results.map((t) =>
         `<a class="item" href="#/rate/${encodeURIComponent(t.id)}" data-act="chooseTitle" data-id="${esc(t.id)}">
           <span class="row">${poster(t.poster_path, 'sm')}<span><strong>${esc(t.name)}</strong><br><span class="muted">${kind(t)}</span></span></span><span class="muted">›</span></a>`).join('')}</div>`
@@ -380,7 +417,8 @@ async function viewAdd() {
   };
 }
 actions.chooseTitle = async (d) => {
-  const { data: t } = await sb.from('titles').select('*').eq('id', d.id).single();
+  const t = await ensureTitle(d.id);
+  if (!t) return toast('Couldn’t load that title. Try again.');
   const { data: mine } = await sb.from('ratings').select('rating, note').eq('title_id', d.id).eq('user_id', state.me.id).maybeSingle();
   await loadProviders([d.id]);
   $app.innerHTML = `
@@ -409,7 +447,7 @@ async function buildRound() {
   const cards = friendTitles.filter((t) => state.providers.get(t.id)?.flatrate?.length);
 
   if (!state.services) state.services = (await fn('services')).services;
-  const svc = myServices().length ? myServices() : state.services.slice(0, 12).map((s) => s.id);
+  const svc = myServices().length ? myServices() : state.services.slice(0, 12).flatMap((s) => s.ids);
   for (let page = state.qp?.page ?? 1; cards.length < ROUND && page < 6; page++) {
     const { now, classic } = await fn('discover', { providers: svc, page });
     const mix = [];
@@ -524,7 +562,6 @@ async function viewMe() {
     sb.from('connections').select('*'),
   ]);
   const friendIds = (conns ?? []).map((c) => (c.user_a === state.me.id ? c.user_b : c.user_a));
-  const chosen = new Set(myServices());
   const actText = { loved_your_pick: 'loved your pick', liked_your_pick: 'liked your pick', thanks: 'said thanks for', joined: 'joined from your invite' };
   $app.innerHTML = `
     <div class="spread"><div><h1>${esc(state.me.name)}</h1><span class="muted">${nRatings ?? 0} ratings · ${friendIds.length} friends</span></div>
@@ -535,8 +572,7 @@ async function viewMe() {
       : '<p class="muted">Nothing yet. When friends save or thank your picks, it shows here.</p>'}
     <h2>My services</h2>
     <p class="muted">Used for the My services filter and highlights.</p>
-    <div class="row" id="svc">${state.services.slice(0, 16).map((s) =>
-      `<button class="chip ${chosen.has(s.id) ? 'on' : ''}" data-act="toggleMySvc" data-id="${s.id}" aria-pressed="${chosen.has(s.id)}">${esc(s.name)}</button>`).join('')}</div>
+    <div class="row" id="svc">${serviceChips('toggleMySvc')}</div>
     <div class="spread"><h2>Friends</h2>${state.me.is_host ? '<button class="primary" data-act="invite">Invite someone</button>' : ''}</div>
     ${friendIds.length ? `<div class="list">${friendIds.map((id) => `<a class="item" href="#/friend/${id}"><span>${esc(nameOf(id))}</span><span class="muted">›</span></a>`).join('')}</div>` : '<p class="muted">No friends connected yet.</p>'}
     <div id="inviteBox"></div>
@@ -552,7 +588,7 @@ async function viewMe() {
 }
 actions.toggleMySvc = async (d, el) => {
   actions.toggleSvc(d, el);
-  const services = [...document.querySelectorAll('#svc .chip.on')].map((b) => Number(b.dataset.id));
+  const services = chosenServiceIds();
   await sb.from('profiles').update({ services }).eq('id', state.me.id);
   state.me.services = services;
 };
@@ -606,7 +642,7 @@ async function viewFriend(id, filter = 'positive') {
   const { data: rs } = await sb.from('ratings').select('user_id, title_id, rating, note, activity_at, titles(*)').eq('user_id', id).order('activity_at', { ascending: false });
   const shown = (rs ?? []).filter((r) => filter === 'all' || POSITIVE.includes(r.rating));
   await loadProviders(shown.map((r) => r.title_id));
-  const svcNames = (state.services ?? []).filter((s) => (p.services ?? []).includes(s.id)).map((s) => s.name);
+  const svcNames = (state.services ?? []).filter((s) => s.ids.some((i) => (p.services ?? []).includes(i))).map((s) => s.name);
   $app.innerHTML = `
     <a href="javascript:history.back()">← Back</a>
     <h1>${esc(isMe(id) ? 'My ratings' : p.name)}</h1>
