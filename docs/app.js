@@ -758,13 +758,14 @@ actions.invite = async () => {
     ${state.invitesMade > 1 ? '<p class="muted small">New link ready.</p>' : ''}
     <p><strong>For one person only.</strong> The link works once, for 7 days.</p>
     <input readonly value="${esc(url)}" id="inviteUrl" aria-label="Invite link">
-    <div class="row"><button class="primary" data-act="shareInvite">Share</button><button data-act="copyInvite">Copy</button></div>
+    <button class="primary big" data-act="shareInvite">Send link</button>
     <button class="big" data-act="invite">New link</button></div>`;
 };
 actions.shareInvite = async () => {
   const url = document.getElementById('inviteUrl').value;
+  // The phone or computer's share menu where there is one; otherwise copy the link.
   if (navigator.share) await navigator.share({ title: 'Let’s share what we’re watching on TV', text: 'Let’s share what we’re watching on TV:', url }).catch(() => {});
-  else actions.copyInvite();
+  else await actions.copyInvite();
 };
 actions.copyInvite = async () => { await navigator.clipboard.writeText(document.getElementById('inviteUrl').value); toast('Link copied'); };
 actions.signOut = async () => { localStorage.removeItem('tv_invite'); await sb.auth.signOut(); };
