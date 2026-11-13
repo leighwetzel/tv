@@ -340,14 +340,15 @@ actions.save = async (d, el) => {
   el.disabled = true;
   const { data: rs } = await sb.from('ratings').select('user_id, rating').eq('title_id', d.id);
   const recs = (rs ?? []).filter((r) => !isMe(r.user_id) && POSITIVE.includes(r.rating)).map((r) => r.user_id);
-  await sb.from('watchlist').upsert({ user_id: state.me.id, title_id: d.id, watched_at: null });
-  if (recs.length) await sb.from('watchlist_credits').upsert(recs.map((rid) => ({ user_id: state.me.id, title_id: d.id, recommender_id: rid })));
+  const { error: wErr } = await sb.from('watchlist').upsert({ user_id: state.me.id, title_id: d.id, watched_at: null });
+  if (wErr) { el.disabled = false; throw wErr; }
+  if (recs.length) await sb.from('watchlist_credits').upsert(recs.map((rid) => ({ user_id: state.me.id, title_id: d.id, recommender_id: rid })), { ignoreDuplicates: true });
   el.outerHTML = '<span class="muted">On your list</span>';
   toast('Saved to your list');
 };
 actions.thanks = async (d, el) => {
   el.disabled = true;
-  await sb.from('reactions').upsert({ from_user: state.me.id, to_user: d.user, title_id: d.id });
+  await sb.from('reactions').upsert({ from_user: state.me.id, to_user: d.user, title_id: d.id }, { ignoreDuplicates: true });
   el.outerHTML = '<span>Thanked</span>';
 };
 
@@ -551,14 +552,14 @@ actions.qpRate = async (d) => {
 };
 actions.qpSkip = async () => {
   const t = state.qp.cards[state.qp.i];
-  await sb.from('quickpick_skips').upsert({ user_id: state.me.id, title_id: t.id });
+  await sb.from('quickpick_skips').upsert({ user_id: state.me.id, title_id: t.id }, { ignoreDuplicates: true });
   state.qp.i++; viewQuickpick();
 };
 actions.qpSave = async () => {
   const t = state.qp.cards[state.qp.i], f = state.qp.lovedBy.get(t.id);
-  await sb.from('quickpick_skips').upsert({ user_id: state.me.id, title_id: t.id });
+  await sb.from('quickpick_skips').upsert({ user_id: state.me.id, title_id: t.id }, { ignoreDuplicates: true });
   await sb.from('watchlist').upsert({ user_id: state.me.id, title_id: t.id, watched_at: null });
-  if (f) await sb.from('watchlist_credits').upsert({ user_id: state.me.id, title_id: t.id, recommender_id: f.user_id });
+  if (f) await sb.from('watchlist_credits').upsert({ user_id: state.me.id, title_id: t.id, recommender_id: f.user_id }, { ignoreDuplicates: true });
   toast('Saved to your list');
   state.qp.i++; viewQuickpick();
 };
