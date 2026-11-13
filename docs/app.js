@@ -2,7 +2,7 @@ import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
 import { SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY } from './config.js';
 
 const sb = createClient(SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY, {
-  auth: { persistSession: true, autoRefreshToken: true, detectSessionInUrl: false },
+  auth: { persistSession: true, autoRefreshToken: true, detectSessionInUrl: true, flowType: 'implicit' },
 });
 
 // ---------------------------------------------------------------- helpers
@@ -110,10 +110,15 @@ const routes = {
 };
 
 async function route() {
+  if (/error_description/.test(location.hash)) {
+    history.replaceState(null, '', location.pathname);
+    toast('That sign-in link expired. Use the 6-digit code instead.');
+  }
   if (!state.session) { $nav.hidden = true; return viewSignIn(); }
   if (!state.me) await loadPeople();
   if (!state.me) { $app.innerHTML = '<p class="empty">Setting up your profile… refresh in a moment.</p>'; return; }
 
+  if (/access_token|error_description/.test(location.hash)) return;
   const [name, ...rest] = location.hash.replace(/^#\/?/, '').split('/');
   let view = routes[name] ? name : 'feed';
   if (!state.me.onboarded && view !== 'quickpick' && view !== 'about') view = 'welcome';
@@ -642,7 +647,22 @@ sb.auth.onAuthStateChange((event, session) => {
     if (session.user.id !== was) {
       state.me = null;
       await redeemPendingInvite();
+      if (event === 'SIGNED_IN') return signedIn();
       route();
     }
   }, 0);
 });
+
+// Shown once, right after signing in (by code or by the email link).
+async function signedIn() {
+  if (/access_token|error_description/.test(location.hash)) history.replaceState(null, '', location.pathname);
+  await loadPeople();
+  $nav.hidden = true;
+  const first = !state.me?.onboarded;
+  $app.innerHTML = `
+    <h1>You’re signed in</h1>
+    <p class="muted">${first ? 'Next: a few quick steps to set up your profile.' : `Welcome back, ${esc(state.me?.name || '')}.`}</p>
+    <p class="muted">Tip: on iPhone or iPad, tap Share → Add to Home Screen to keep tv one tap away.</p>
+    <button class="primary big" data-act="continue">${first ? 'Get started' : 'Go to the feed'}</button>`;
+}
+actions.continue = () => { location.hash = '#/feed'; route(); };
