@@ -46,8 +46,8 @@ const poster = (path, cls = '') => path
   : `<div class="poster ${cls}" aria-hidden="true"></div>`;
 const kind = (t) => `${t.media_type === 'tv' ? 'TV' : 'Movie'}${t.year ? ' · ' + t.year : ''}`;
 const BRAND = `<header class="brand">
-  <svg class="logo" viewBox="0 0 64 64" aria-hidden="true"><rect width="64" height="64" rx="15" fill="currentColor"/><rect x="10" y="15" width="44" height="31" rx="5" fill="none" stroke="#fff" stroke-width="4"/><path d="M24 54h16" stroke="#fff" stroke-width="4" stroke-linecap="round"/><path d="M32 39c-6-4-9-7-9-11a4.5 4.5 0 0 1 9-1.5 4.5 4.5 0 0 1 9 1.5c0 4-3 7-9 11z" fill="#fff"/></svg>
-  <div><h1>TV</h1><p class="tagline">Picks from friends and family</p></div></header>`;
+  <svg class="logo" viewBox="0 0 64 64" aria-hidden="true"><rect width="64" height="64" rx="15" fill="currentColor"/><defs><clipPath id="rexscreen"><rect x="10" y="15" width="44" height="31" rx="5"/></clipPath></defs><rect x="10" y="15" width="44" height="31" rx="5" fill="#fff"/><g clip-path="url(#rexscreen)"><path d="M13 42C18.5 41 23 38.5 26.5 35.5L28 30C28 25.2 31.4 21.5 36.2 21.5L43.5 21.5C46.3 21.5 48.5 23.5 48.5 26.3L48.5 29.6C48.5 31 47.5 31.9 46 32.2L40.6 33.3L39 36.2C37.4 39.3 34.6 41.3 31 41.8C25 42.7 19 42.8 13 42Z" fill="#4E9A45"/><path d="M27 40.5L26.6 46H30.2L30.6 41.5ZM32.4 40.8L33 46H36.6L35.8 40.2Z" fill="#4E9A45"/><path d="M38.8 35.6l2.6 1.1v1.7" fill="none" stroke="#4E9A45" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/><circle cx="38.6" cy="25.4" r="1.6" fill="#fff"/><path d="M40.8 29.2c2.2 1.1 4.6 1.1 6.6-.1" fill="none" stroke="#fff" stroke-width="1.3" stroke-linecap="round"/></g><path d="M24 54h16" stroke="#fff" stroke-width="4" stroke-linecap="round"/></svg>
+  <div><h1>TV Rex</h1><p class="tagline">Picks from friends and family</p></div></header>`;
 const personLink = (id) => `<a class="person" href="#/friend/${encodeURIComponent(id)}">${esc(nameOf(id))}</a>`;
 const SAVED = '<span class="btn saved">✓ Saved</span>'; // shown in place of + Want to watch once a title is on your list
 const titleLink = (t) => `#/title/${encodeURIComponent(t.id)}`;
@@ -305,11 +305,11 @@ const HELP_EMAIL = ''; // shown as "Still stuck? Email …" when set
 const HELP = [
   ['Getting in', [
     ['How do I sign in?', 'Type your email and tap <b>Email me a code</b>. Open the email from TV and type the 6-digit code. On iPhone, the code often appears above the keyboard so you can tap it instead.'],
-    ['How do I sign in with Face ID?', 'After you sign in with a code, TV asks if you’d like to use Face ID. Tap <b>Yes</b>. Missed it? Go to <b>Me</b> and tap <b>Turn on</b> next to Sign in with Face ID. Next time, tap <b>Sign in with Face ID</b> and look at your phone.'],
+    ['How do I sign in with Face ID?', 'After you sign in with a code, TV Rex asks if you’d like to use Face ID. Tap <b>Yes</b>. Missed it? Go to <b>Me</b> and tap <b>Turn on</b> next to Sign in with Face ID. Next time, tap <b>Sign in with Face ID</b> and look at your phone.'],
     ['Why do I have to sign in again?', 'Safari forgets sign-ins for websites you haven’t opened in a week. Turn on Face ID and signing back in takes one look.'],
     ['My invite link says it’s used or expired', 'Each invite link works once, for one person, for 7 days. Ask the person who invited you for a new link.'],
   ]],
-  ['Using TV', [
+  ['Using TV Rex', [
     ['How do I add something I watched?', 'Tap <b>Add</b> at the bottom. Type the name, tap the right show or movie, pick a rating, and add a note if you like.'],
     ['What do the ratings mean?', '<b>Loved</b> and <b>Liked</b> show up in everyone’s feed. <b>Didn’t like</b> and <b>Gave up</b> only show next to other people’s reviews of the same title, so they never start a new card.'],
     ['Where can I watch it?', 'Look for <b>Watch on</b> on each card. Services you’ve picked in <b>Me</b> are marked “yours.” Streaming info is from JustWatch, for the US.'],
@@ -319,13 +319,13 @@ const HELP = [
   ]],
   ['People', [
     ['How do I follow someone?', 'Tap their name on any review, then tap <b>+ Follow</b>.'],
-    ['Everyone or Following?', '<b>Everyone</b> shows picks from everyone on TV. <b>Following</b> shows only people you follow, plus your own.'],
+    ['Everyone or Following?', '<b>Everyone</b> shows picks from everyone on TV Rex. <b>Following</b> shows only people you follow, plus your own.'],
     ['How do I invite someone?', 'Go to <b>Me</b>, tap <b>Invite someone</b>, then <b>Send link</b>. Each link is for one person only. For another person, tap <b>New link</b>.'],
-    ['Who can see my picks?', 'Everyone who joined TV by invite can see your name and reviews. Your email, your streaming services and My list stay private.'],
+    ['Who can see my picks?', 'Everyone who joined TV Rex by invite can see your name and reviews. Your email, your streaming services and My list stay private.'],
   ]],
   ['Tips', [
-    ['How do I put TV on my Home Screen?', 'In Safari, tap the Share button, then <b>Add to Home Screen</b>, then <b>Add</b>. Open TV from the new icon and sign in once.'],
-    ['How do I make the text bigger?', 'TV follows your iPhone or iPad text size: <b>Settings › Display &amp; Brightness › Text Size</b>. In Safari you can also tap <b>aA</b> in the address bar and tap the larger A.'],
+    ['How do I put TV Rex on my Home Screen?', 'In Safari, tap the Share button, then <b>Add to Home Screen</b>, then <b>Add</b>. Open TV Rex from the new icon and sign in once.'],
+    ['How do I make the text bigger?', 'TV Rex follows your iPhone or iPad text size: <b>Settings › Display &amp; Brightness › Text Size</b>. In Safari you can also tap <b>aA</b> in the address bar and tap the larger A.'],
   ]],
 ];
 function viewHelp() {
@@ -344,9 +344,9 @@ function viewNotMember() {
     expired: 'That invite link has expired. Links work for 7 days.',
     invalid: 'That invite link doesn’t work.' }[state.inviteProblem];
   $app.innerHTML = `${BRAND}
-    <h2>TV is invite-only</h2>
+    <h2>TV Rex is invite-only</h2>
     ${why ? `<p><strong>${why}</strong></p>` : ''}
-    <p>Ask the person who told you about TV to send you a new invite link, then open it on this device.</p>
+    <p>Ask the person who told you about TV Rex to send you a new invite link, then open it on this device.</p>
     <button class="big" data-act="signOut">Sign out</button>`;
 }
 
@@ -355,15 +355,15 @@ function viewNotMember() {
 async function viewWelcome() {
   if (!state.services) state.services = (await fn('services')).services;
   $app.innerHTML = `
-    <h1>Welcome to TV</h1>
-    <p class="muted">You’ll see picks from everyone on TV, and they’ll see yours.</p>
+    <h1>Welcome to TV Rex</h1>
+    <p class="muted">You’ll see picks from everyone on TV Rex, and they’ll see yours.</p>
     <div class="field"><label for="name">Your name, as others see it</label>
       <input id="name" value="${esc(state.me.name)}" autocomplete="given-name" placeholder="First name">
       <p class="muted small" id="nameError" role="alert"></p></div>
     <h2>Which streaming services do you have?</h2>
     <div class="row" id="svc">${serviceChips('toggleSvc')}</div>
     <button class="primary big" data-act="finishWelcome">Done</button>
-    <p class="muted">Tip: on iPhone or iPad, tap Share → Add to Home Screen to keep TV one tap away.</p>`;
+    <p class="muted">Tip: on iPhone or iPad, tap Share → Add to Home Screen to keep TV Rex one tap away.</p>`;
 }
 function serviceChips(act) {
   return state.services.map((s) => {
@@ -856,7 +856,7 @@ actions.invite = async () => {
 actions.shareInvite = async () => {
   const url = document.getElementById('inviteUrl').value;
   // The phone or computer's share menu where there is one; otherwise copy the link.
-  if (navigator.share) await navigator.share({ title: 'Let’s share what we’re watching on TV', text: 'Let’s share what we’re watching on TV:', url }).catch(() => {});
+  if (navigator.share) await navigator.share({ title: 'Let’s share what we’re watching on TV Rex', text: 'Let’s share what we’re watching on TV Rex:', url }).catch(() => {});
   else await actions.copyInvite();
 };
 actions.copyInvite = async () => { await navigator.clipboard.writeText(document.getElementById('inviteUrl').value); toast('Link copied'); };
@@ -870,7 +870,7 @@ actions.deleteAccount = async () => {
 function viewAbout() {
   $app.innerHTML = `
     <a href="#/me">← Back</a>
-    <h1>About TV</h1>
+    <h1>About TV Rex</h1>
     <p>A private place for friends and family to share what they’re watching.</p>
     <p class="credits">This product uses the TMDB API but is not endorsed or certified by TMDB. Title data and images from <a href="https://www.themoviedb.org">TMDB</a>. Streaming data from <a href="https://www.justwatch.com">JustWatch</a>.</p>`;
 }

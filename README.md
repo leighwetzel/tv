@@ -1,4 +1,4 @@
-# tv
+# TV Rex
 
 A private friends-and-family app for TV and movie recommendations, at tv.xoleigh.com.
 
