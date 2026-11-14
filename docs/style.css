@@ -107,6 +107,19 @@ a.more { align-self: flex-start; min-height: 44px; display: inline-flex; align-i
 .faq details p { padding: 0 14px 14px; margin: 0; }
 .list.faq > * { padding: 0; }
 
+/* New here? and invite requests */
+.newhere { display: flex; flex-direction: column; gap: 10px; margin-top: 8px; }
+.newhere h2 { margin: 0; }
+.hp { position: absolute; left: -9999px; width: 1px; height: 1px; overflow: hidden; }
+.ink { color: var(--ink); }
+.offer-icon.check { font-size: 34px; font-weight: 700; }
+.requests { display: flex; flex-direction: column; gap: 12px; }
+.requests h2 { display: flex; align-items: center; gap: 10px; }
+.req { display: flex; flex-direction: column; gap: 4px; }
+.req .row { margin-top: 8px; flex-wrap: nowrap; }
+.req .row button { flex: 1; padding: 0 12px; }
+.req .row button.primary { flex: 2; }
+
 /* Face ID */
 button.face { min-height: 60px; font-size: calc(var(--base) + 1px); }
 .or { display: flex; align-items: center; gap: 10px; color: var(--muted); font-size: calc(var(--base) - 3px); }

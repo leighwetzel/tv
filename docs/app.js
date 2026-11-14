@@ -171,14 +171,19 @@ async function route() {
     history.replaceState(null, '', location.pathname);
     toast('That sign-in link expired. Use the 6-digit code instead.');
   }
-  if (!state.session) { $nav.hidden = true; return location.hash.startsWith('#/help') ? viewHelp() : viewSignIn(); }
+  if (!state.session) {
+    $nav.hidden = true;
+    if (location.hash.startsWith('#/help')) return viewHelp();
+    if (location.hash.startsWith('#/request')) return viewRequest();
+    return viewSignIn();
+  }
   if (!state.me) await loadPeople();
   if (!state.me) { $app.innerHTML = '<p class="empty">Setting up your profile… refresh in a moment.</p>'; return; }
 
   if (/access_token|error_description/.test(location.hash)) return;
   const [name, ...rest] = location.hash.replace(/^#\/?/, '').split('/');
   let view = routes[name] ? name : 'feed';
-  if (state.me.is_member === false) { $nav.hidden = true; return viewNotMember(); }
+  if (state.me.is_member === false) { $nav.hidden = true; return name === 'request' ? viewRequest() : viewNotMember(); }
   if (!state.me.onboarded && view !== 'quickpick' && view !== 'about' && view !== 'passkey' && view !== 'help') view = 'welcome';
 
   $nav.hidden = view === 'welcome';
@@ -191,10 +196,13 @@ async function route() {
 window.addEventListener('hashchange', route);
 
 async function updateActivityDot() {
-  const { count } = await sb.from('activity').select('id', { count: 'exact', head: true }).is('read_at', null);
+  const [{ count }, { count: reqs }] = await Promise.all([
+    sb.from('activity').select('id', { count: 'exact', head: true }).is('read_at', null),
+    sb.from('invite_requests').select('id', { count: 'exact', head: true }).is('handled', null), // 0 unless you get requests
+  ]);
   const me = $nav.querySelector('[data-tab=me]');
   me.querySelector('.dot')?.remove();
-  if (count) me.insertAdjacentHTML('beforeend', '<span class="dot" aria-label="new activity"></span>');
+  if (count || reqs) me.insertAdjacentHTML('beforeend', '<span class="dot" aria-label="new activity"></span>');
 }
 
 // ---------------------------------------------------------------- sign in
@@ -256,6 +264,10 @@ function viewSignIn(step = 'email', email = '') {
         <input id="email" type="email" autocomplete="email" required value="${esc(email)}">
         <button class="${offerFace ? '' : 'primary '}big" type="submit">${offerFace ? 'Email me a code' : 'Send me a code'}</button>
       </form>
+      ${localStorage.getItem('tv_invite') ? '' : `<div class="card newhere">
+        <h2>New here?</h2>
+        <p class="muted">TV Rex is invite-only. If you know someone on it, you can ask for an invite.</p>
+        <a class="btn big" href="#/request">Request an invite</a></div>`}
       <a class="help-link" href="#/help">Need help signing in?</a>`;
     document.getElementById('f').onsubmit = async (e) => {
       e.preventDefault();
@@ -302,14 +314,16 @@ async function redeemPendingInvite() {
 
 // ---------------------------------------------------------------- help
 const HELP_EMAIL = ''; // shown as "Still stuck? Email …" when set
+// Each group is for people signed out ('out'), signed in ('in'), or both. Tips are split per question.
 const HELP = [
-  ['Getting in', [
-    ['How do I sign in?', 'Type your email and tap <b>Email me a code</b>. Open the email from TV and type the 6-digit code. On iPhone, the code often appears above the keyboard so you can tap it instead.'],
-    ['How do I sign in with Face ID?', 'After you sign in with a code, TV Rex asks if you’d like to use Face ID. Tap <b>Yes</b>. Missed it? Go to <b>Me</b> and tap <b>Turn on</b> next to Sign in with Face ID. Next time, tap <b>Sign in with Face ID</b> and look at your phone.'],
+  ['Getting in', 'out', [
+    ['How do I sign in?', 'Type your email and tap <b>Email me a code</b>. Open the email from TV Rex and type the 6-digit code. On iPhone, the code often appears above the keyboard so you can tap it instead.'],
+    ['How do I sign in with Face ID?', 'After you sign in with a code, TV Rex asks if you’d like to use Face ID. Tap <b>Yes</b>. Missed it? Once you’re in, go to <b>Me</b> and tap <b>Turn on</b> next to Sign in with Face ID. Next time, tap <b>Sign in with Face ID</b> and look at your phone.'],
     ['Why do I have to sign in again?', 'Safari forgets sign-ins for websites you haven’t opened in a week. Turn on Face ID and signing back in takes one look.'],
+    ['I don’t have an invite', 'TV Rex is invite-only. If you know someone on it, ask them for a link, or <a href="#/request">request an invite</a> and we’ll email you one.'],
     ['My invite link says it’s used or expired', 'Each invite link works once, for one person, for 7 days. Ask the person who invited you for a new link.'],
   ]],
-  ['Using TV Rex', [
+  ['Using TV Rex', 'in', [
     ['How do I add something I watched?', 'Tap <b>Add</b> at the bottom. Type the name, tap the right show or movie, pick a rating, and add a note if you like.'],
     ['What do the ratings mean?', '<b>Loved</b> and <b>Liked</b> show up in everyone’s feed. <b>Didn’t like</b> and <b>Gave up</b> only show next to other people’s reviews of the same title, so they never start a new card.'],
     ['Where can I watch it?', 'Look for <b>Watch on</b> on each card. Services you’ve picked in <b>Me</b> are marked “yours.” Streaming info is from JustWatch, for the US.'],
@@ -317,22 +331,27 @@ const HELP = [
     ['What does “Seen it” do?', 'It lets you rate a title right from the card, without opening it.'],
     ['How do I change or remove my review?', 'Open the show or movie and tap <b>Edit</b> next to your rating.'],
   ]],
-  ['People', [
+  ['People', 'in', [
     ['How do I follow someone?', 'Tap their name on any review, then tap <b>+ Follow</b>.'],
     ['Everyone or Following?', '<b>Everyone</b> shows picks from everyone on TV Rex. <b>Following</b> shows only people you follow, plus your own.'],
     ['How do I invite someone?', 'Go to <b>Me</b>, tap <b>Invite someone</b>, then <b>Send link</b>. Each link is for one person only. For another person, tap <b>New link</b>.'],
     ['Who can see my picks?', 'Everyone who joined TV Rex by invite can see your name and reviews. Your email, your streaming services and My list stay private.'],
   ]],
-  ['Tips', [
+  ['Tips', 'both', [
+    ['How do I turn on Face ID?', 'Go to <b>Me</b> and tap <b>Turn on</b> next to Sign in with Face ID. Next time TV Rex asks you to sign in, tap <b>Sign in with Face ID</b> and look at your phone.', 'in'],
     ['How do I put TV Rex on my Home Screen?', 'In Safari, tap the Share button, then <b>Add to Home Screen</b>, then <b>Add</b>. Open TV Rex from the new icon and sign in once.'],
     ['How do I make the text bigger?', 'TV Rex follows your iPhone or iPad text size: <b>Settings › Display &amp; Brightness › Text Size</b>. In Safari you can also tap <b>aA</b> in the address bar and tap the larger A.'],
   ]],
 ];
+function helpFor(who) {
+  return HELP.filter(([, g]) => g === who || g === 'both')
+    .map(([group, , qs]) => [group, qs.filter(([, , only]) => !only || only === who)]);
+}
 function viewHelp() {
   $app.innerHTML = `
     <a href="${state.session ? 'javascript:history.back()' : '#/'}">← Back</a>
     <h1>Help</h1>
-    ${HELP.map(([group, qs], gi) => `<h2 class="help-group">${group}</h2>
+    ${helpFor(state.session ? 'in' : 'out').map(([group, qs], gi) => `<h2 class="help-group">${group}</h2>
       <div class="list faq">${qs.map(([q, a], qi) => `<details${!state.session && gi === 0 && qi === 0 ? ' open' : ''}><summary>${q}</summary><p>${a}</p></details>`).join('')}</div>`).join('')}
     ${HELP_EMAIL ? `<p class="muted">Still stuck? Email <a href="mailto:${HELP_EMAIL}">${HELP_EMAIL}</a>.</p>` : ''}`;
 }
@@ -347,7 +366,41 @@ function viewNotMember() {
     <h2>TV Rex is invite-only</h2>
     ${why ? `<p><strong>${why}</strong></p>` : ''}
     <p>Ask the person who told you about TV Rex to send you a new invite link, then open it on this device.</p>
+    <a class="btn primary big" href="#/request">Request an invite</a>
     <button class="big" data-act="signOut">Sign out</button>`;
+}
+
+// ---------------------------------------------------------------- request an invite
+// Open to anyone. The database quietly drops repeats and floods, and the answer is always the same,
+// so it never reveals whether an email already has an account.
+function viewRequest() {
+  const email = state.session?.user?.email ?? '';
+  $app.innerHTML = `
+    <a href="#/">← Back</a>
+    <h1>Request an invite</h1>
+    <p class="muted">TV Rex is just for friends and family. Tell us who you are, and we’ll email you an invite link.</p>
+    <form id="rq" class="field" style="gap:16px">
+      <div class="field"><label for="rqName">Your name</label><input id="rqName" autocomplete="name" maxlength="80" required></div>
+      <div class="field"><label for="rqEmail">Your email</label><input id="rqEmail" type="email" autocomplete="email" maxlength="200" required value="${esc(email)}"></div>
+      <div class="field"><label for="rqKnows">Who do you know on TV Rex?</label><input id="rqKnows" maxlength="200" required></div>
+      <div class="hp" aria-hidden="true"><label for="rqWeb">Website</label><input id="rqWeb" tabindex="-1" autocomplete="off"></div>
+      <button class="primary big" type="submit">Send request</button>
+    </form>`;
+  document.getElementById('rq').onsubmit = async (e) => {
+    e.preventDefault();
+    const val = (id) => document.getElementById(id).value.trim();
+    const addr = val('rqEmail');
+    const btn = e.target.querySelector('button[type=submit]'); btn.disabled = true;
+    if (!val('rqWeb')) { // filled in only by bots
+      const { error } = await sb.rpc('request_invite', { p_name: val('rqName'), p_email: addr, p_knows: val('rqKnows') });
+      if (error) { btn.disabled = false; return toast('Couldn’t send. Check your connection and try again.'); }
+    }
+    $app.innerHTML = `${state.session ? '' : BRAND}
+      <div class="card offer"><div class="offer-icon check" aria-hidden="true">✓</div>
+        <h1>Request sent</h1>
+        <p class="muted">If we know you, we’ll email an invite link to <b class="ink">${esc(addr)}</b>. Open it on this phone or iPad to join.</p></div>
+      <a class="help-link" href="#/">${state.session ? '← Back' : '← Back to sign in'}</a>`;
+  };
 }
 
 // ---------------------------------------------------------------- welcome
@@ -782,12 +835,14 @@ actions.watched = async (d) => {
 async function viewMe() {
   await loadPeople();
   if (!state.services) state.services = (await fn('services')).services;
-  const [{ data: acts }, { count: nRatings }, { data: myRecent }, { error: invitesClosed }, { data: keys, error: keysErr }] = await Promise.all([
+  const [{ data: acts }, { count: nRatings }, { data: myRecent }, { error: invitesClosed }, { data: keys, error: keysErr }, { data: reqs }] = await Promise.all([
     sb.from('activity').select('*, titles(name)').order('created_at', { ascending: false }).limit(20),
     sb.from('ratings').select('title_id', { count: 'exact', head: true }).eq('user_id', state.me.id),
     sb.from('ratings').select('rating, title_id, titles(id, name, media_type)').eq('user_id', state.me.id).order('activity_at', { ascending: false }).limit(5),
     sb.rpc('my_open_invites'), // missing until migration 006: then only hosts invite
     canPasskey() ? sb.auth.passkey.list() : Promise.resolve({ error: true }),
+    // Invite requests: only the person in request_inbox gets rows back (migration 007); everyone else gets none.
+    sb.from('invite_requests').select('id, name, email, knows, created_at').is('handled', null).order('created_at', { ascending: false }).limit(50),
   ]);
   const faceOn = !keysErr && Array.isArray(keys) && keys.length > 0;
   const canInvite = invitesClosed ? state.me.is_host : true;
@@ -797,6 +852,13 @@ async function viewMe() {
     <div class="field"><label for="myName">Your name, as others see it</label>
       <div class="row" style="flex-wrap:nowrap"><input id="myName" style="flex:1;min-width:0" value="${esc(state.me.name)}" autocomplete="given-name">
       <button class="primary" data-act="saveName">Save</button></div></div>
+    ${reqs?.length ? `<section class="requests"><h2>Invite requests <span class="pill">${reqs.length} new</span></h2>
+      <div class="list">${reqs.map((r) => `<div class="req" id="req${r.id}">
+        <strong>${esc(r.name)}</strong>
+        <span class="muted">Knows: ${esc(r.knows) || '(left blank)'}</span>
+        <span class="muted small">${esc(r.email)} · ${when(r.created_at)}</span>
+        <div class="row"><button class="primary" data-act="inviteRequest" data-id="${r.id}" data-email="${esc(r.email)}" data-name="${esc(r.name)}">Email invite</button>
+          <button data-act="skipRequest" data-id="${r.id}">Not now</button></div></div>`).join('')}</div></section>` : ''}
     <h2>Activity</h2>
     ${acts?.length ? `<div class="list">${acts.map((a) => `<div class="${a.read_at ? '' : 'unread'}">
       ${personLink(a.actor_id)} ${actText[a.kind]} ${a.titles ? `<a href="#/title/${encodeURIComponent(a.title_id)}">${esc(a.titles.name)}</a>` : ''} <span class="muted">· ${when(a.created_at)}</span></div>`).join('')}</div>`
@@ -853,6 +915,31 @@ actions.invite = async () => {
     <button class="primary big" data-act="shareInvite">Send link</button>
     <button class="big" data-act="invite">New link</button></div>`;
 };
+// Make a fresh one-person link and open a ready-to-send email to the requester in your Mail app.
+actions.inviteRequest = async (d, el) => {
+  el.disabled = true;
+  const { data, error } = await sb.from('invites').insert({ created_by: state.me.id }).select('code').single();
+  if (error) { el.disabled = false; return toast('Couldn’t make a link. You can have up to 10 unused links at a time.'); }
+  const url = `${location.origin}${location.pathname}?invite=${data.code}`;
+  await sb.from('invite_requests').update({ handled: 'invited', handled_at: new Date().toISOString() }).eq('id', d.id);
+  const first = d.name.split(/\s+/)[0];
+  const body = `Hi ${first},\n\nHere’s your invite to TV Rex, where friends and family share what they’re watching:\n\n${url}\n\nOpen it on your phone or iPad. The link works once, for 7 days.\n\n${state.me.name}`;
+  location.href = `mailto:${encodeURIComponent(d.email)}?subject=${encodeURIComponent('Your TV Rex invite')}&body=${encodeURIComponent(body)}`;
+  doneRequest(d.id, 'Invite ready in Mail');
+};
+actions.skipRequest = async (d, el) => {
+  el.disabled = true;
+  await sb.from('invite_requests').update({ handled: 'not_now', handled_at: new Date().toISOString() }).eq('id', d.id);
+  doneRequest(d.id, 'Request hidden');
+};
+function doneRequest(id, msg) {
+  document.getElementById(`req${id}`)?.remove();
+  const left = document.querySelectorAll('.requests .req').length;
+  const pill = document.querySelector('.requests .pill');
+  if (!left) document.querySelector('.requests')?.remove(); else if (pill) pill.textContent = `${left} new`;
+  toast(msg);
+  updateActivityDot();
+}
 actions.shareInvite = async () => {
   const url = document.getElementById('inviteUrl').value;
   // The phone or computer's share menu where there is one; otherwise copy the link.
