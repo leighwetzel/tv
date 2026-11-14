@@ -1,12 +1,16 @@
 /* Slate on white, Atkinson Hyperlegible. Base size is --base; everything else scales from it. */
 :root {
-  --base: 18px;
+  /* 18px at the iPhone's default text size (17px); grows with Settings > Text Size, capped so layouts hold. */
+  --base: min(calc(1rem * 18 / 17), 27px);
   --bg: #F4F4F2; --card: #FFFFFF; --line: #D6D9E0; --soft: #E4E5E8; --mid: #B9BFCB;
   --ink: #1E1C19; --muted: #55524C; --accent: #3B4A6B; --accent-tint: #E8EBF1; --accent-ink: #FFFFFF; --danger: #A3261C;
   --font: 'Atkinson Hyperlegible', system-ui, sans-serif;
 }
 * { box-sizing: border-box; }
-html, body { margin: 0; background: var(--bg); color: var(--ink); font: 400 var(--base)/1.45 var(--font); -webkit-text-size-adjust: 100%; }
+html { font-size: 17px; -webkit-text-size-adjust: 100%; }
+@supports (font: -apple-system-body) { html { font: -apple-system-body; } } /* follows iPhone/iPad Text Size */
+html, body { margin: 0; background: var(--bg); color: var(--ink); }
+body { font: 400 var(--base)/1.45 var(--font); }
 body { padding-bottom: calc(84px + env(safe-area-inset-bottom)); }
 main { max-width: 600px; margin: 0 auto; padding: calc(16px + env(safe-area-inset-top)) 16px 28px; display: flex; flex-direction: column; gap: 16px; }
 h1 { font-size: calc(var(--base) + 11px); line-height: 1.1; margin: 0; font-weight: 700; }
@@ -90,6 +94,18 @@ a.more { align-self: flex-start; min-height: 44px; display: inline-flex; align-i
 .brand .logo { width: 50px; height: 50px; flex: none; }
 .brand h1 { color: var(--ink); font-size: calc(var(--base) + 14px); line-height: 1; letter-spacing: .02em; }
 .tagline { color: var(--muted); font-size: calc(var(--base) - 2px); margin-top: 4px; }
+
+/* Help */
+.help-link { align-self: center; min-height: 44px; display: inline-flex; align-items: center; }
+.help-group { font-size: calc(var(--base) - 2px); color: var(--muted); letter-spacing: .04em; text-transform: uppercase; margin-top: 8px; }
+.faq details { border-top: 1px solid var(--line); padding: 0; }
+.faq details:first-child { border-top: 0; }
+.faq summary { list-style: none; cursor: pointer; padding: 14px 48px 14px 14px; font-weight: 700; position: relative; min-height: 52px; display: flex; align-items: center; }
+.faq summary::-webkit-details-marker { display: none; }
+.faq summary::after { content: '+'; position: absolute; right: 16px; top: 50%; transform: translateY(-50%); font-size: calc(var(--base) + 8px); font-weight: 400; color: var(--accent); }
+.faq details[open] summary::after { content: '–'; }
+.faq details p { padding: 0 14px 14px; margin: 0; }
+.list.faq > * { padding: 0; }
 
 /* Face ID */
 button.face { min-height: 60px; font-size: calc(var(--base) + 1px); }

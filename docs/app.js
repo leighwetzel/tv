@@ -163,7 +163,7 @@ function watchOn(id) {
 
 const routes = {
   feed: viewFeed, title: viewTitle, add: viewAdd, quickpick: viewQuickpick,
-  list: viewList, me: viewMe, friend: viewFriend, welcome: viewWelcome, about: viewAbout, following: viewFollowing, passkey: viewPasskey,
+  list: viewList, me: viewMe, friend: viewFriend, welcome: viewWelcome, about: viewAbout, following: viewFollowing, passkey: viewPasskey, help: viewHelp,
 };
 
 async function route() {
@@ -171,7 +171,7 @@ async function route() {
     history.replaceState(null, '', location.pathname);
     toast('That sign-in link expired. Use the 6-digit code instead.');
   }
-  if (!state.session) { $nav.hidden = true; return viewSignIn(); }
+  if (!state.session) { $nav.hidden = true; return location.hash.startsWith('#/help') ? viewHelp() : viewSignIn(); }
   if (!state.me) await loadPeople();
   if (!state.me) { $app.innerHTML = '<p class="empty">Setting up your profile… refresh in a moment.</p>'; return; }
 
@@ -179,7 +179,7 @@ async function route() {
   const [name, ...rest] = location.hash.replace(/^#\/?/, '').split('/');
   let view = routes[name] ? name : 'feed';
   if (state.me.is_member === false) { $nav.hidden = true; return viewNotMember(); }
-  if (!state.me.onboarded && view !== 'quickpick' && view !== 'about' && view !== 'passkey') view = 'welcome';
+  if (!state.me.onboarded && view !== 'quickpick' && view !== 'about' && view !== 'passkey' && view !== 'help') view = 'welcome';
 
   $nav.hidden = view === 'welcome';
   for (const a of $nav.querySelectorAll('a')) a.classList.toggle('on', a.dataset.tab === view);
@@ -255,7 +255,8 @@ function viewSignIn(step = 'email', email = '') {
         <label for="email">Your email</label>
         <input id="email" type="email" autocomplete="email" required value="${esc(email)}">
         <button class="${offerFace ? '' : 'primary '}big" type="submit">${offerFace ? 'Email me a code' : 'Send me a code'}</button>
-      </form>`;
+      </form>
+      <a class="help-link" href="#/help">Need help signing in?</a>`;
     document.getElementById('f').onsubmit = async (e) => {
       e.preventDefault();
       const addr = document.getElementById('email').value.trim();
@@ -297,6 +298,43 @@ async function redeemPendingInvite() {
     state.inviteProblem = why ?? null;
   }
   if (data) state.me = null; // reload: now a member
+}
+
+// ---------------------------------------------------------------- help
+const HELP_EMAIL = ''; // shown as "Still stuck? Email …" when set
+const HELP = [
+  ['Getting in', [
+    ['How do I sign in?', 'Type your email and tap <b>Email me a code</b>. Open the email from TV and type the 6-digit code. On iPhone, the code often appears above the keyboard so you can tap it instead.'],
+    ['How do I sign in with Face ID?', 'After you sign in with a code, TV asks if you’d like to use Face ID. Tap <b>Yes</b>. Missed it? Go to <b>Me</b> and tap <b>Turn on</b> next to Sign in with Face ID. Next time, tap <b>Sign in with Face ID</b> and look at your phone.'],
+    ['Why do I have to sign in again?', 'Safari forgets sign-ins for websites you haven’t opened in a week. Turn on Face ID and signing back in takes one look.'],
+    ['My invite link says it’s used or expired', 'Each invite link works once, for one person, for 7 days. Ask the person who invited you for a new link.'],
+  ]],
+  ['Using TV', [
+    ['How do I add something I watched?', 'Tap <b>Add</b> at the bottom. Type the name, tap the right show or movie, pick a rating, and add a note if you like.'],
+    ['What do the ratings mean?', '<b>Loved</b> and <b>Liked</b> show up in everyone’s feed. <b>Didn’t like</b> and <b>Gave up</b> only show next to other people’s reviews of the same title, so they never start a new card.'],
+    ['Where can I watch it?', 'Look for <b>Watch on</b> on each card. Services you’ve picked in <b>Me</b> are marked “yours.” Streaming info is from JustWatch, for the US.'],
+    ['How do I save something for later?', 'Tap <b>+ Want to watch</b>. It goes to <b>My list</b> at the bottom of the screen.'],
+    ['What does “Seen it” do?', 'It lets you rate a title right from the card, without opening it.'],
+    ['How do I change or remove my review?', 'Open the show or movie and tap <b>Edit</b> next to your rating.'],
+  ]],
+  ['People', [
+    ['How do I follow someone?', 'Tap their name on any review, then tap <b>+ Follow</b>.'],
+    ['Everyone or Following?', '<b>Everyone</b> shows picks from everyone on TV. <b>Following</b> shows only people you follow, plus your own.'],
+    ['How do I invite someone?', 'Go to <b>Me</b>, tap <b>Invite someone</b>, then <b>Send link</b>. Each link is for one person only. For another person, tap <b>New link</b>.'],
+    ['Who can see my picks?', 'Everyone who joined TV by invite can see your name and reviews. Your email, your streaming services and My list stay private.'],
+  ]],
+  ['Tips', [
+    ['How do I put TV on my Home Screen?', 'In Safari, tap the Share button, then <b>Add to Home Screen</b>, then <b>Add</b>. Open TV from the new icon and sign in once.'],
+    ['How do I make the text bigger?', 'TV follows your iPhone or iPad text size: <b>Settings › Display &amp; Brightness › Text Size</b>. In Safari you can also tap <b>aA</b> in the address bar and tap the larger A.'],
+  ]],
+];
+function viewHelp() {
+  $app.innerHTML = `
+    <a href="${state.session ? 'javascript:history.back()' : '#/'}">← Back</a>
+    <h1>Help</h1>
+    ${HELP.map(([group, qs], gi) => `<h2 class="help-group">${group}</h2>
+      <div class="list faq">${qs.map(([q, a], qi) => `<details${!state.session && gi === 0 && qi === 0 ? ' open' : ''}><summary>${q}</summary><p>${a}</p></details>`).join('')}</div>`).join('')}
+    ${HELP_EMAIL ? `<p class="muted">Still stuck? Email <a href="mailto:${HELP_EMAIL}">${HELP_EMAIL}</a>.</p>` : ''}`;
 }
 
 // ---------------------------------------------------------------- not a member
@@ -776,6 +814,7 @@ async function viewMe() {
       : '<p class="muted">Nothing rated yet. Tap Add to rate a show.</p>'}
     <div class="list">
       <div class="spread"><span>Weekly email (Sundays)</span><button class="chip ${state.me.weekly_email ? 'on' : ''}" data-act="toggleEmail">${state.me.weekly_email ? 'On' : 'Off'}</button></div>
+      <a class="item" href="#/help"><span>Help</span><span class="muted">›</span></a>
       <a class="item" href="#/about"><span>About and credits</span><span class="muted">›</span></a>
       <button class="link" data-act="signOut">Sign out</button>
       <button class="link danger" data-act="deleteAccount">Delete my account</button>
@@ -831,7 +870,7 @@ actions.deleteAccount = async () => {
 function viewAbout() {
   $app.innerHTML = `
     <a href="#/me">← Back</a>
-    <h1>About tv</h1>
+    <h1>About TV</h1>
     <p>A private place for friends and family to share what they’re watching.</p>
     <p class="credits">This product uses the TMDB API but is not endorsed or certified by TMDB. Title data and images from <a href="https://www.themoviedb.org">TMDB</a>. Streaming data from <a href="https://www.justwatch.com">JustWatch</a>.</p>`;
 }
