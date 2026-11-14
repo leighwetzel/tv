@@ -91,6 +91,15 @@ a.more { align-self: flex-start; min-height: 44px; display: inline-flex; align-i
 .brand h1 { color: var(--ink); font-size: calc(var(--base) + 14px); line-height: 1; letter-spacing: .02em; }
 .tagline { color: var(--muted); font-size: calc(var(--base) - 2px); margin-top: 4px; }
 
+/* Face ID */
+button.face { min-height: 60px; font-size: calc(var(--base) + 1px); }
+.or { display: flex; align-items: center; gap: 10px; color: var(--muted); font-size: calc(var(--base) - 3px); }
+.or::before, .or::after { content: ''; flex: 1; height: 1.5px; background: var(--line); }
+.offer { border: 2px solid var(--accent); text-align: center; display: flex; flex-direction: column; gap: 12px; padding: 22px 16px; }
+.offer h1 { font-size: calc(var(--base) + 6px); }
+.offer-icon { width: 60px; height: 60px; margin: 0 auto; border-radius: 16px; background: var(--accent-tint); color: var(--accent); display: flex; align-items: center; justify-content: center; }
+.offer-icon svg { width: 34px; height: 34px; }
+
 /* Everyone / Following tabs */
 .tabs { display: flex; border-bottom: 1.5px solid var(--line); }
 .tabs button { flex: 1; border: 0; border-radius: 0; background: none; min-height: 50px; color: var(--muted); font-weight: 400; border-bottom: 3px solid transparent; margin-bottom: -1.5px; }

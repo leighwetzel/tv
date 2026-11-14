@@ -1,4 +1,4 @@
-import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
+import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.119.0'; // pinned: passkeys (Face ID) are new
 import { SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY } from './config.js';
 
 const sb = createClient(SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY, {
@@ -163,7 +163,7 @@ function watchOn(id) {
 
 const routes = {
   feed: viewFeed, title: viewTitle, add: viewAdd, quickpick: viewQuickpick,
-  list: viewList, me: viewMe, friend: viewFriend, welcome: viewWelcome, about: viewAbout, following: viewFollowing,
+  list: viewList, me: viewMe, friend: viewFriend, welcome: viewWelcome, about: viewAbout, following: viewFollowing, passkey: viewPasskey,
 };
 
 async function route() {
@@ -179,7 +179,7 @@ async function route() {
   const [name, ...rest] = location.hash.replace(/^#\/?/, '').split('/');
   let view = routes[name] ? name : 'feed';
   if (state.me.is_member === false) { $nav.hidden = true; return viewNotMember(); }
-  if (!state.me.onboarded && view !== 'quickpick' && view !== 'about') view = 'welcome';
+  if (!state.me.onboarded && view !== 'quickpick' && view !== 'about' && view !== 'passkey') view = 'welcome';
 
   $nav.hidden = view === 'welcome';
   for (const a of $nav.querySelectorAll('a')) a.classList.toggle('on', a.dataset.tab === view);
@@ -199,14 +199,62 @@ async function updateActivityDot() {
 
 // ---------------------------------------------------------------- sign in
 
+// ---------------------------------------------------------------- Face ID (passkeys)
+// A passkey lives in the phone's keychain, so it survives Safari clearing website data.
+const canPasskey = () => !!window.PublicKeyCredential;
+const bioName = () => /iPhone|iPad|iPod/.test(navigator.userAgent) || (/Macintosh/.test(navigator.userAgent) && navigator.maxTouchPoints > 1)
+  ? 'Face ID' : /Macintosh/.test(navigator.userAgent) ? 'Touch ID' : 'your device';
+const FACE_ICON = '<svg aria-hidden="true" viewBox="0 0 24 24" width="26" height="26" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 8V6a2 2 0 0 1 2-2h2M16 4h2a2 2 0 0 1 2 2v2M20 16v2a2 2 0 0 1-2 2h-2M8 20H6a2 2 0 0 1-2-2v-2M9 10v1M15 10v1M12 10v3h-1M9.5 16a3.5 3.5 0 0 0 5 0"/></svg>';
+
+actions.passkeySignIn = async (d, el) => {
+  el.disabled = true;
+  const { error } = await sb.auth.signInWithPasskey();
+  el.disabled = false;
+  if (error) document.getElementById('passkeyMsg').textContent = `${bioName()} sign-in isn’t set up on this ${/iPad/.test(navigator.userAgent) ? 'iPad' : 'phone'} yet, or it was cancelled. Use the email code below.`;
+  // success: Supabase signals SIGNED_IN and the app moves on by itself
+};
+
+// Offered once after signing in with an email code, if this person has no passkey yet.
+async function shouldOfferPasskey() {
+  if (!canPasskey()) return false;
+  const later = Number(localStorage.getItem('tv_passkey_later') || 0);
+  if (Date.now() - later < 30 * 864e5) return false;
+  const { data, error } = await sb.auth.passkey.list();
+  return !error && Array.isArray(data) && data.length === 0;
+}
+function viewPasskey() {
+  $app.innerHTML = `
+    <div class="card offer">
+      <div class="offer-icon">${FACE_ICON}</div>
+      <h1>Sign in with ${bioName()} next time?</h1>
+      <p class="muted">No more email codes. One look at your ${/iPad/.test(navigator.userAgent) ? 'iPad' : 'phone'} and you’re in.</p>
+      <button class="primary big" data-act="addPasskey">${FACE_ICON} Yes, use ${bioName()}</button>
+      <button class="big" data-act="passkeyLater">Not now</button>
+    </div>`;
+}
+actions.addPasskey = async (d, el) => {
+  el.disabled = true;
+  const { error } = await sb.auth.registerPasskey();
+  el.disabled = false;
+  if (error) return toast(`${bioName()} wasn’t set up. You can try again from Me.`);
+  toast(`${bioName()} is set up`);
+  if (location.hash === '#/passkey') location.hash = '#/feed'; else route();
+};
+actions.passkeyLater = () => { localStorage.setItem('tv_passkey_later', String(Date.now())); location.hash = '#/feed'; };
+
 function viewSignIn(step = 'email', email = '') {
   if (step === 'email') {
+    // Invite links lead to email only: a newcomer can't have Face ID set up yet.
+    const offerFace = canPasskey() && !localStorage.getItem('tv_invite');
     $app.innerHTML = `
       ${BRAND}
+      ${offerFace ? `<button class="primary big face" data-act="passkeySignIn">${FACE_ICON} Sign in with ${bioName()}</button>
+      <p class="muted small" id="passkeyMsg" role="status"></p>
+      <div class="or"><span>or get a code by email</span></div>` : ''}
       <form id="f" class="field">
         <label for="email">Your email</label>
         <input id="email" type="email" autocomplete="email" required value="${esc(email)}">
-        <button class="primary big" type="submit">Send me a code</button>
+        <button class="${offerFace ? '' : 'primary '}big" type="submit">${offerFace ? 'Email me a code' : 'Send me a code'}</button>
       </form>`;
     document.getElementById('f').onsubmit = async (e) => {
       e.preventDefault();
@@ -231,8 +279,9 @@ function viewSignIn(step = 'email', email = '') {
       e.preventDefault();
       const token = document.getElementById('code').value.replace(/\s/g, '');
       const btn = e.target.querySelector('button'); btn.disabled = true;
+      state.codeSignIn = true; // offer Face ID once this sign-in lands
       const { error } = await sb.auth.verifyOtp({ email, token, type: 'email' });
-      if (error) { btn.disabled = false; return toast('That code didn’t work. Check it and try again.'); }
+      if (error) { state.codeSignIn = false; btn.disabled = false; return toast('That code didn’t work. Check it and try again.'); }
     };
   }
 }
@@ -695,12 +744,14 @@ actions.watched = async (d) => {
 async function viewMe() {
   await loadPeople();
   if (!state.services) state.services = (await fn('services')).services;
-  const [{ data: acts }, { count: nRatings }, { data: myRecent }, { error: invitesClosed }] = await Promise.all([
+  const [{ data: acts }, { count: nRatings }, { data: myRecent }, { error: invitesClosed }, { data: keys, error: keysErr }] = await Promise.all([
     sb.from('activity').select('*, titles(name)').order('created_at', { ascending: false }).limit(20),
     sb.from('ratings').select('title_id', { count: 'exact', head: true }).eq('user_id', state.me.id),
     sb.from('ratings').select('rating, title_id, titles(id, name, media_type)').eq('user_id', state.me.id).order('activity_at', { ascending: false }).limit(5),
     sb.rpc('my_open_invites'), // missing until migration 006: then only hosts invite
+    canPasskey() ? sb.auth.passkey.list() : Promise.resolve({ error: true }),
   ]);
+  const faceOn = !keysErr && Array.isArray(keys) && keys.length > 0;
   const canInvite = invitesClosed ? state.me.is_host : true;
   const actText = { loved_your_pick: 'loved your pick', liked_your_pick: 'liked your pick', thanks: 'said thanks for', joined: 'joined from your invite' };
   $app.innerHTML = `
@@ -717,6 +768,8 @@ async function viewMe() {
     <div class="row" id="svc">${serviceChips('toggleMySvc')}</div>
     ${canInvite ? '<div class="spread"><h2>Invite</h2><button class="primary" data-act="invite">Invite someone</button></div>' : ''}
     <div id="inviteBox"></div>
+    ${keysErr ? '' : `<div class="list"><div class="item"><span><strong>Sign in with ${bioName()}</strong> <span class="muted">· ${faceOn ? 'On' : 'Off'}</span></span>
+      ${faceOn ? '' : `<button data-act="addPasskey">Turn on</button>`}</div></div>`}
     ${state.followsReady ? `<div class="list"><a class="item" href="#/following"><span><strong>Following</strong> <span class="muted">· ${state.following.size} ${state.following.size === 1 ? 'person' : 'people'}</span></span><span class="muted">›</span></a></div>` : ''}
     <div class="spread"><h2>My picks</h2><a class="small" href="#/friend/${state.me.id}">See all</a></div>
     ${myRecent?.length ? `<div class="list">${myRecent.map((r) => `<a class="item" href="${titleLink(r.titles)}"><span><strong>${esc(r.titles.name)}</strong> <span class="muted">· ${RATING[r.rating]}</span></span><span class="muted">›</span></a>`).join('')}</div>`
@@ -888,7 +941,9 @@ sb.auth.onAuthStateChange((event, session) => {
 
 // Right after signing in (by code or by the email link): go straight to the feed.
 // First-timers are sent on to Welcome by route().
-function signedIn() {
-  history.replaceState(null, '', location.pathname + '#/feed');
+async function signedIn() {
+  const offer = state.codeSignIn && await shouldOfferPasskey();
+  state.codeSignIn = false;
+  history.replaceState(null, '', location.pathname + (offer ? '#/passkey' : '#/feed'));
   route();
 }
