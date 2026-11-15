@@ -835,7 +835,7 @@ actions.watched = async (d) => {
 async function viewMe() {
   await loadPeople();
   if (!state.services) state.services = (await fn('services')).services;
-  const [{ data: acts }, { count: nRatings }, { data: myRecent }, { error: invitesClosed }, { data: keys, error: keysErr }, { data: reqs }] = await Promise.all([
+  const [{ data: acts }, { count: nRatings }, { data: myRecent }, { error: invitesClosed }, { data: keys, error: keysErr }, { data: reqs, error: reqsErr }, { data: inbox }] = await Promise.all([
     sb.from('activity').select('*, titles(name)').order('created_at', { ascending: false }).limit(20),
     sb.from('ratings').select('title_id', { count: 'exact', head: true }).eq('user_id', state.me.id),
     sb.from('ratings').select('rating, title_id, titles(id, name, media_type)').eq('user_id', state.me.id).order('activity_at', { ascending: false }).limit(5),
@@ -843,7 +843,9 @@ async function viewMe() {
     canPasskey() ? sb.auth.passkey.list() : Promise.resolve({ error: true }),
     // Invite requests: only the person in request_inbox gets rows back (migration 007); everyone else gets none.
     sb.from('invite_requests').select('id, name, email, knows, created_at').is('handled', null).order('created_at', { ascending: false }).limit(50),
+    sb.rpc('gets_invite_requests'), // true only for you, so the section (and any error) shows only to you
   ]);
+  if (reqsErr) console.error('invite_requests', reqsErr);
   const faceOn = !keysErr && Array.isArray(keys) && keys.length > 0;
   const canInvite = invitesClosed ? state.me.is_host : true;
   const actText = { loved_your_pick: 'loved your pick', liked_your_pick: 'liked your pick', thanks: 'said thanks for', joined: 'joined from your invite' };
@@ -852,6 +854,8 @@ async function viewMe() {
     <div class="field"><label for="myName">Your name, as others see it</label>
       <div class="row" style="flex-wrap:nowrap"><input id="myName" style="flex:1;min-width:0" value="${esc(state.me.name)}" autocomplete="given-name">
       <button class="primary" data-act="saveName">Save</button></div></div>
+    ${inbox && !reqs?.length ? `<section class="requests"><h2>Invite requests</h2>
+      <p class="muted">${reqsErr ? `Couldn’t load requests: ${esc(reqsErr.message)} (${esc(reqsErr.code ?? '')})` : 'No new requests.'}</p></section>` : ''}
     ${reqs?.length ? `<section class="requests"><h2>Invite requests <span class="pill">${reqs.length} new</span></h2>
       <div class="list">${reqs.map((r) => `<div class="req" id="req${r.id}">
         <strong>${esc(r.name)}</strong>
