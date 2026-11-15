@@ -56,8 +56,12 @@ function when(ts) {
   const d = new Date(ts), mins = (Date.now() - d) / 60000;
   if (mins < 60) return `${Math.max(1, Math.round(mins))}m`;
   if (mins < 60 * 24) return `${Math.round(mins / 60)}h`;
-  if (mins < 60 * 24 * 6) return d.toLocaleDateString('en-US', { weekday: 'short' });
-  return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+  const days = Math.floor(mins / (60 * 24));
+  if (days < 7) return `${days}d`;
+  if (days < 35) return `${Math.floor(days / 7)}w`;
+  const opts = { month: 'short', day: 'numeric' };
+  if (d.getFullYear() !== new Date().getFullYear()) opts.year = 'numeric';
+  return d.toLocaleDateString('en-US', opts);
 }
 
 function toast(msg) {
@@ -533,7 +537,7 @@ function feedCard(c, saved) {
         ${watchOn(t.id)}
       </div>
     </div>
-      ${shown.map((r) => reviewHtml(r, true)).join('')}
+      ${shown.map((r) => reviewHtml(r)).join('')}
       ${more > 0 ? `<a class="small more" href="${titleLink(t)}">+${more} more</a>` : ''}
       <div class="row actions">
         ${mine ? `<span class="muted">You: <strong>${ratingLabel(mine)}</strong></span> <a class="small" href="${titleLink(t)}">Edit</a>`
@@ -544,10 +548,9 @@ function feedCard(c, saved) {
     </article>`;
 }
 
-function reviewHtml(r, withThanks) {
+function reviewHtml(r) {
   return `<div class="review">
-    <div class="who">${personLink(r.user_id)} <span class="pill">${ratingLabel(r)}</span> <span class="when">${when(r.activity_at)}</span>
-      ${withThanks && !isMe(r.user_id) && POSITIVE.includes(r.rating) ? `<button class="link small" data-act="thanks" data-user="${r.user_id}" data-id="${esc(r.title_id)}">Thanks</button>` : ''}</div>
+    <div class="who">${personLink(r.user_id)} <span class="pill">${ratingLabel(r)}</span> <span class="when">${when(r.activity_at)}</span></div>
     ${r.note ? `<div class="note">“${esc(r.note)}”</div>` : ''}</div>`;
 }
 
@@ -566,11 +569,6 @@ actions.save = async (d, el) => {
   if (recs.length) await sb.from('watchlist_credits').upsert(recs.map((rid) => ({ user_id: state.me.id, title_id: d.id, recommender_id: rid })), { ignoreDuplicates: true });
   el.outerHTML = SAVED;
   toast('Saved to your list');
-};
-actions.thanks = async (d, el) => {
-  el.disabled = true;
-  await sb.from('reactions').upsert({ from_user: state.me.id, to_user: d.user, title_id: d.id }, { ignoreDuplicates: true });
-  el.outerHTML = '<span class="when">Thanked</span>';
 };
 
 // ---------------------------------------------------------------- title page
@@ -611,7 +609,7 @@ async function viewTitle(id) {
           <button class="link danger" data-act="removeRating" data-id="${esc(id)}">Remove my rating</button></div>
       </div>` : ratingForm(null, id)}
     <h2>Reviews</h2>
-    ${others.length ? `<div class="list">${others.map((r) => reviewHtml(r, true)).join('')}</div>` : '<p class="muted">No one else has rated this yet.</p>'}`;
+    ${others.length ? `<div class="list">${others.map((r) => reviewHtml(r)).join('')}</div>` : '<p class="muted">No one else has rated this yet.</p>'}`;
 }
 
 function ratingForm(mine, titleId, saveLabel = 'Save') {
