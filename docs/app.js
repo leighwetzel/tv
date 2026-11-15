@@ -167,12 +167,27 @@ async function loadPeople() {
   state.following = new Set((fl ?? []).map((f) => f.followee));
 }
 
+// Streaming info changes slowly, so keep it on the device for a day instead of asking TMDB on every open.
+const PROVIDERS_KEY = 'tv_providers', DAY = 864e5;
+function storeGet(key) { try { return JSON.parse(localStorage.getItem(key)); } catch { return null; } }
+function storeSet(key, val) { try { localStorage.setItem(key, JSON.stringify(val)); } catch { /* storage full or blocked: skip */ } }
+(() => {
+  const saved = storeGet(PROVIDERS_KEY) ?? {};
+  for (const [id, e] of Object.entries(saved)) if (Date.now() - e.at < DAY) state.providers.set(id, e.p);
+})();
+function saveProviders(fresh) {
+  const saved = storeGet(PROVIDERS_KEY) ?? {}, now = Date.now();
+  for (const [id, e] of Object.entries(saved)) if (now - e.at >= DAY) delete saved[id];
+  for (const [id, p] of Object.entries(fresh)) saved[id] = { p, at: now };
+  storeSet(PROVIDERS_KEY, saved);
+}
 async function loadProviders(ids) {
   const missing = [...new Set(ids)].filter((id) => !state.providers.has(id));
   for (let i = 0; i < missing.length; i += 60) {
     try {
       const { providers } = await fn('providers', { ids: missing.slice(i, i + 60) });
       for (const [id, p] of Object.entries(providers)) state.providers.set(id, p);
+      saveProviders(providers);
     } catch (e) { console.error(e); }
   }
 }
@@ -471,10 +486,39 @@ actions.finishWelcome = async () => {
 
 // ---------------------------------------------------------------- feed
 
+// The feed shows the last copy saved on this device right away, then fetches fresh data and redraws.
+// Saved per person, so a shared iPad never shows someone else's feed.
+const feedKey = () => `tv_feed_${state.me?.id}`;
+async function fetchFeed() {
+  const [{ data: rows, error }, { data: wl }] = await Promise.all([
+    sb.from('ratings')
+      .select('user_id, title_id, rating, note, season, source, activity_at, titles(id, name, year, media_type, poster_path)')
+      .order('activity_at', { ascending: false }).limit(400),
+    sb.from('watchlist').select('title_id').is('watched_at', null),
+  ]);
+  if (error) throw error;
+  return { rows: rows ?? [], wl: wl ?? [] };
+}
 async function viewFeed() {
-  const { data: rows } = await sb.from('ratings')
-    .select('user_id, title_id, rating, note, season, source, activity_at, titles(id, name, year, media_type, poster_path)')
-    .order('activity_at', { ascending: false }).limit(400);
+  const cached = storeGet(feedKey());
+  if (cached) {
+    await renderFeed(cached);
+    fetchFeed().then(async (fresh) => {
+      storeSet(feedKey(), fresh);
+      // Redraw only if something changed and you're still on the feed, not mid-rating or in the filter sheet.
+      if (JSON.stringify(fresh) === JSON.stringify(cached)) return;
+      const page = location.hash.replace(/^#\/?/, '').split('/')[0];
+      if ((page && page !== 'feed') || document.querySelector('#rate') || document.body.classList.contains('sheet-open')) return;
+      await renderFeed(fresh);
+      markLongNotes();
+    }).catch((e) => console.error(e));
+    return;
+  }
+  const fresh = await fetchFeed();
+  storeSet(feedKey(), fresh);
+  await renderFeed(fresh);
+}
+async function renderFeed({ rows, wl }) {
 
   // Quick-pick ratings without a note become one summary line per person.
   const isQuiet = (r) => r.source === 'quickpick' && !r.note;
@@ -504,8 +548,7 @@ async function viewFeed() {
   if (state.feedSvc === 'mine') list = list.filter((c) => onMyServices(c.title.id));
   if (state.feedSort === 'release') list.sort((a, b) => (b.title.year ?? 0) - (a.title.year ?? 0)); // same year keeps review order
 
-  const { data: wl } = await sb.from('watchlist').select('title_id').is('watched_at', null);
-  const saved = new Set((wl ?? []).map((w) => w.title_id));
+  const saved = new Set(wl.map((w) => w.title_id));
 
   $app.innerHTML = `
     ${BRAND}
@@ -988,7 +1031,10 @@ actions.shareInvite = async () => {
   else await actions.copyInvite();
 };
 actions.copyInvite = async () => { await navigator.clipboard.writeText(document.getElementById('inviteUrl').value); toast('Link copied'); };
-actions.signOut = async () => { localStorage.removeItem('tv_invite'); await sb.auth.signOut(); };
+actions.signOut = async () => {
+  localStorage.removeItem('tv_invite'); localStorage.removeItem(feedKey());
+  await sb.auth.signOut();
+};
 actions.deleteAccount = async () => {
   if (!confirm('Delete your account and all your ratings? This can’t be undone.')) return;
   await sb.rpc('delete_my_account');
