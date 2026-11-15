@@ -927,7 +927,8 @@ actions.inviteRequest = async (d, el) => {
   const url = `${location.origin}${location.pathname}?invite=${data.code}`;
   await sb.from('invite_requests').update({ handled: 'invited', handled_at: new Date().toISOString() }).eq('id', d.id);
   const first = d.name.split(/\s+/)[0];
-  const body = `Hi ${first},\n\nHere’s your invite to TV Rex, where friends and family share what they’re watching:\n\n${url}\n\nOpen it on your phone or iPad. The link works once, for 7 days.\n\n${state.me.name}`;
+  const body = [`Hi ${first},`, 'Here’s your invite to TV Rex, where friends and family share what they’re watching:', url,
+    'The link works only once, for 7 days.', state.me.name].join('\r\n\r\n'); // mail links need \r\n for line breaks
   location.href = `mailto:${encodeURIComponent(d.email)}?subject=${encodeURIComponent('Your TV Rex invite')}&body=${encodeURIComponent(body)}`;
   doneRequest(d.id, 'Invite ready in Mail');
 };
