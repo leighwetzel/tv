@@ -626,11 +626,14 @@ function reviewHtml(r) {
     <div class="who">${personLink(r.user_id)} ${ratingTag(r)}
       ${isMe(r.user_id) ? `<a class="small edit" href="#/title/${encodeURIComponent(r.title_id)}">Edit</a>` : ''}
       <span class="when">${when(r.activity_at)}</span></div>
-    ${r.note ? `<div class="note clamp">“${esc(r.note)}”</div><button class="link small readmore" data-act="readMore" hidden>Read more</button>` : ''}</div></div>`;
+    ${r.note ? `<div class="note clamp">${esc(r.note)}</div><button class="link small readmore" data-act="readMore" hidden>Read more</button>` : ''}</div></div>`;
 }
 // Long notes show 4 lines; Read more appears only when a note is actually cut off.
 function markLongNotes() {
-  for (const n of document.querySelectorAll('.note.clamp')) if (n.scrollHeight > n.clientHeight + 2) n.nextElementSibling.hidden = false;
+  for (const n of document.querySelectorAll('.note.clamp')) {
+    const line = parseFloat(getComputedStyle(n).lineHeight) || 26;
+    if (n.scrollHeight > line * 4.5) n.nextElementSibling.hidden = false; // more than 4 lines
+  }
 }
 actions.readMore = (d, el) => { el.previousElementSibling.classList.remove('clamp'); el.remove(); };
 
@@ -681,7 +684,7 @@ async function viewTitle(id) {
       <div class="card" id="myReview">
         <div class="spread"><span>${ratingTag(mine)} <span class="muted">· ${when(mine.activity_at)}</span></span>
           <button class="link" data-act="editReview">Edit review</button></div>
-        ${mine.note ? `<div class="note">“${esc(mine.note)}”</div>` : '<p class="muted">No note.</p>'}
+        ${mine.note ? `<div class="note">${esc(mine.note)}</div>` : '<p class="muted">No note.</p>'}
       </div>
       <div id="reviewForm" hidden>
         ${ratingForm(mine, id, 'Save changes')}
@@ -1106,7 +1109,7 @@ async function friendList(id, p, all, filter, limit = PAGE) {
       <a href="${titleLink(r.titles)}">${poster(r.titles.poster_path, 'sm')}</a>
       <div class="pick-body"><a class="title" href="${titleLink(r.titles)}">${esc(r.titles.name)}</a>
         <span class="muted">${filter === 'all' || filter === 'mixed' ? ratingLabel(r) + ' · ' : ''}${kind(r.titles)}${filter !== 'all' && filter !== 'mixed' && r.season ? ' · S' + r.season : ''}</span>${watchOn(r.title_id)}
-        ${r.note ? `<div class="note">“${esc(r.note)}”</div>` : ''}</div></div>
+        ${r.note ? `<div class="note">${esc(r.note)}</div>` : ''}</div></div>
       ${isMe(id) ? '' : `<div class="row actions">${myRating.has(r.title_id) ? `<span class="muted">You: <strong>${ratingLabel(myRating.get(r.title_id))}</strong></span>`
         : saved.has(r.title_id) ? SAVED
         : `<button class="primary" data-act="save" data-id="${esc(r.title_id)}">+ Want to watch</button>`}
