@@ -40,7 +40,7 @@ function subs(id) {
 const ratingLabel = (r) => `${RATING[r.rating]}${r.season ? ' · S' + r.season : ''}`;
 // Rating icons: heart for Loved, thumbs for Liked / Didn't like, zzz for Gave up (paths from Tabler Icons, MIT).
 const ICON_PATH = {
-  loved: '<path fill="currentColor" d="M19.5 12.572l-7.5 7.428l-7.5 -7.428a5 5 0 1 1 7.5 -6.566a5 5 0 1 1 7.5 6.572"/>',
+  loved: '<path d="M19.5 12.572l-7.5 7.428l-7.5 -7.428a5 5 0 1 1 7.5 -6.566a5 5 0 1 1 7.5 6.572"/>',
   liked: '<path d="M7 11v8a1 1 0 0 1 -1 1h-2a1 1 0 0 1 -1 -1v-7a1 1 0 0 1 1 -1h3a4 4 0 0 0 4 -4v-1a2 2 0 0 1 4 0v5h3a2 2 0 0 1 2 2l-1 5a2 3 0 0 1 -2 2h-7a3 3 0 0 1 -3 -3"/>',
   didnt_like: '<path d="M7 13v-8a1 1 0 0 0 -1 -1h-2a1 1 0 0 0 -1 1v7a1 1 0 0 0 1 1h3a4 4 0 0 1 4 4v1a2 2 0 0 0 4 0v-5h3a2 2 0 0 0 2 -2l-1 -5a2 3 0 0 0 -2 -2h-7a3 3 0 0 0 -3 3"/>',
   gave_up: '<path d="M4 12h6l-6 8h6M14 4h6l-6 8h6"/>',

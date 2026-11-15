@@ -61,7 +61,7 @@ label { font-size: calc(var(--base) - 2px); color: var(--muted); font-weight: 70
 .review .who a.edit { font-weight: 400; }
 .rtag { display: inline-flex; align-items: center; gap: 4px; font-weight: 400; font-size: calc(var(--base) - 2px); }
 .ricon { width: 1.1em; height: 1.1em; flex: none; }
-.rtag { color: var(--ink); } .rtag .ricon { color: var(--accent); }
+.rtag { color: var(--ink); } .rtag .ricon { color: var(--ink); }
 .r-didnt_like .ricon, .r-gave_up .ricon { color: var(--muted); }
 .tally { display: flex; gap: 16px; margin-top: 2px; }
 .note.clamp { display: -webkit-box; -webkit-line-clamp: 4; -webkit-box-orient: vertical; overflow: hidden; }
