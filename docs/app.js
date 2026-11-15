@@ -38,6 +38,35 @@ function subs(id) {
   return [...out.values()];
 }
 const ratingLabel = (r) => `${RATING[r.rating]}${r.season ? ' · S' + r.season : ''}`;
+// Rating icons: heart for Loved, thumbs for Liked / Didn't like, zzz for Gave up (paths from Tabler Icons, MIT).
+const ICON_PATH = {
+  loved: '<path fill="currentColor" d="M19.5 12.572l-7.5 7.428l-7.5 -7.428a5 5 0 1 1 7.5 -6.566a5 5 0 1 1 7.5 6.572"/>',
+  liked: '<path d="M7 11v8a1 1 0 0 1 -1 1h-2a1 1 0 0 1 -1 -1v-7a1 1 0 0 1 1 -1h3a4 4 0 0 0 4 -4v-1a2 2 0 0 1 4 0v5h3a2 2 0 0 1 2 2l-1 5a2 3 0 0 1 -2 2h-7a3 3 0 0 1 -3 -3"/>',
+  didnt_like: '<path d="M7 13v-8a1 1 0 0 0 -1 -1h-2a1 1 0 0 0 -1 1v7a1 1 0 0 0 1 1h3a4 4 0 0 1 4 4v1a2 2 0 0 0 4 0v-5h3a2 2 0 0 0 2 -2l-1 -5a2 3 0 0 0 -2 -2h-7a3 3 0 0 0 -3 3"/>',
+  gave_up: '<path d="M4 12h6l-6 8h6M14 4h6l-6 8h6"/>',
+};
+const ratingIcon = (k) => `<svg class="ricon" aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">${ICON_PATH[k]}</svg>`;
+// Icon plus word, no background, so it never looks like a button.
+const ratingTag = (r) => `<span class="rtag r-${r.rating}">${ratingIcon(r.rating)}${ratingLabel(r)}</span>`;
+// "♥ 5  👍 3" for a title; only ratings someone actually picked.
+function tally(reviews) {
+  const n = {};
+  for (const r of reviews) n[r.rating] = (n[r.rating] ?? 0) + 1;
+  const parts = Object.keys(RATING).filter((k) => n[k]).map((k) =>
+    `<span class="rtag r-${k}" aria-label="${n[k]} ${RATING[k]}">${ratingIcon(k)}${n[k]}</span>`);
+  return parts.length ? `<div class="tally">${parts.join('')}</div>` : '';
+}
+// Square avatar: their photo if they have one, otherwise initials on a color picked from their id.
+const AV_COLORS = [['#E8EBF1', '#2C3A57'], ['#E1F5EE', '#085041'], ['#FAECE7', '#712B13'], ['#EEEDFE', '#3C3489'], ['#FAEEDA', '#633806'], ['#FBEAF0', '#72243E']];
+function avatar(id) {
+  const p = state.people.get(id);
+  if (p?.avatar_url) return `<img class="avatar" src="${esc(p.avatar_url)}" alt="">`;
+  const words = (p?.name || '?').trim().split(/\s+/);
+  const ini = (words[0][0] + (words.length > 1 ? words[words.length - 1][0] : '')).toUpperCase();
+  let h = 0; for (const ch of String(id)) h = (h * 31 + ch.charCodeAt(0)) >>> 0;
+  const [bg, fg] = AV_COLORS[h % AV_COLORS.length];
+  return `<span class="avatar" aria-hidden="true" style="background:${bg};color:${fg}">${esc(ini)}</span>`;
+}
 const isMine = (svc) => svc.ids.some((i) => myServices().includes(i));
 
 const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
@@ -193,7 +222,7 @@ async function route() {
   $nav.hidden = view === 'welcome';
   for (const a of $nav.querySelectorAll('a')) a.classList.toggle('on', a.dataset.tab === view);
   window.scrollTo(0, 0);
-  try { await routes[view](...rest.map(decodeURIComponent)); }
+  try { await routes[view](...rest.map(decodeURIComponent)); markLongNotes(); }
   catch (e) { console.error(e); $app.innerHTML = '<p class="empty">Couldn’t load this. Pull to refresh or try again.</p>'; }
   updateActivityDot();
 }
@@ -526,8 +555,10 @@ actions.closeFilters = () => {
 document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && document.body.classList.contains('sheet-open')) actions.closeFilters(); });
 
 function feedCard(c, saved) {
-  const t = c.title, shown = c.reviews.slice(0, 2), more = c.reviews.length - shown.length;
-  const mine = c.reviews.find((r) => isMe(r.user_id));
+  const t = c.title, mine = c.reviews.find((r) => isMe(r.user_id));
+  const shown = c.reviews.slice(0, 2);
+  if (mine && !shown.includes(mine)) shown.push(mine); // your own review always shows, with its Edit link
+  const more = c.reviews.length - shown.length;
   return `<article class="card pick-card">
     <div class="pick">
       <a href="${titleLink(t)}">${poster(t.poster_path)}</a>
@@ -535,24 +566,30 @@ function feedCard(c, saved) {
         <a class="title" href="${titleLink(t)}">${esc(t.name)}</a>
         <span class="muted">${kind(t)}</span>
         ${watchOn(t.id)}
+        ${tally(c.reviews)}
       </div>
     </div>
       ${shown.map((r) => reviewHtml(r)).join('')}
-      ${more > 0 ? `<a class="small more" href="${titleLink(t)}">+${more} more</a>` : ''}
-      <div class="row actions">
-        ${mine ? `<span class="muted">You: <strong>${ratingLabel(mine)}</strong></span> <a class="small" href="${titleLink(t)}">Edit</a>`
-          : `${saved.has(t.id) ? SAVED
-              : `<button class="primary" data-act="save" data-id="${esc(t.id)}">+ Want to watch</button>`}
-             <button data-act="seenIt" data-id="${esc(t.id)}">Seen it</button>`}
-      </div>
+      ${more > 0 ? `<a class="small more" href="${titleLink(t)}">See all ${c.reviews.length} reviews ›</a>` : ''}
+      ${mine ? '' : `<div class="row actions">
+        ${saved.has(t.id) ? SAVED : `<button class="primary" data-act="save" data-id="${esc(t.id)}">+ Want to watch</button>`}
+        <button data-act="seenIt" data-id="${esc(t.id)}">Seen it</button>
+      </div>`}
     </article>`;
 }
 
 function reviewHtml(r) {
-  return `<div class="review">
-    <div class="who">${personLink(r.user_id)} <span class="pill">${ratingLabel(r)}</span> <span class="when">${when(r.activity_at)}</span></div>
-    ${r.note ? `<div class="note">“${esc(r.note)}”</div>` : ''}</div>`;
+  return `<div class="review">${avatar(r.user_id)}<div class="review-body">
+    <div class="who">${personLink(r.user_id)} ${ratingTag(r)}
+      ${isMe(r.user_id) ? `<a class="small edit" href="#/title/${encodeURIComponent(r.title_id)}">Edit</a>` : ''}
+      <span class="when">${when(r.activity_at)}</span></div>
+    ${r.note ? `<div class="note clamp">“${esc(r.note)}”</div><button class="link small readmore" data-act="readMore" hidden>Read more</button>` : ''}</div></div>`;
 }
+// Long notes show 4 lines; Read more appears only when a note is actually cut off.
+function markLongNotes() {
+  for (const n of document.querySelectorAll('.note.clamp')) if (n.scrollHeight > n.clientHeight + 2) n.nextElementSibling.hidden = false;
+}
+actions.readMore = (d, el) => { el.previousElementSibling.classList.remove('clamp'); el.remove(); };
 
 actions.seenIt = (d, el) => {
   const box = el.closest('.actions');
@@ -599,7 +636,7 @@ async function viewTitle(id) {
     <h2>Your rating</h2>
     ${mine ? `
       <div class="card" id="myReview">
-        <div class="spread"><span><strong>${ratingLabel(mine)}</strong> <span class="muted">· ${when(mine.activity_at)}</span></span>
+        <div class="spread"><span>${ratingTag(mine)} <span class="muted">· ${when(mine.activity_at)}</span></span>
           <button class="link" data-act="editReview">Edit review</button></div>
         ${mine.note ? `<div class="note">“${esc(mine.note)}”</div>` : '<p class="muted">No note.</p>'}
       </div>
@@ -609,17 +646,18 @@ async function viewTitle(id) {
           <button class="link danger" data-act="removeRating" data-id="${esc(id)}">Remove my rating</button></div>
       </div>` : ratingForm(null, id)}
     <h2>Reviews</h2>
+    ${tally(rs ?? [])}
     ${others.length ? `<div class="list">${others.map((r) => reviewHtml(r)).join('')}</div>` : '<p class="muted">No one else has rated this yet.</p>'}`;
 }
 
 function ratingForm(mine, titleId, saveLabel = 'Save') {
   return `<form class="field" data-title="${esc(titleId)}" id="rate">
     <div class="ratings">${Object.entries(RATING).map(([k, v]) =>
-      `<button type="button" class="${mine?.rating === k ? 'on' : ''}" data-act="pickRating" data-val="${k}" aria-pressed="${mine?.rating === k}">${v}</button>`).join('')}</div>
+      `<button type="button" class="${mine?.rating === k ? 'on' : ''}" data-act="pickRating" data-val="${k}" aria-pressed="${mine?.rating === k}">${ratingIcon(k)}${v}</button>`).join('')}</div>
     ${titleId.startsWith('tv:') ? `<label for="season">How far did you get?</label>
     <select id="season" class="season" data-title="${esc(titleId)}" data-current="${mine?.season ?? ''}"><option value="">Whole show</option></select>` : ''}
-    <label for="note">One-line note (optional)</label>
-    <input id="note" maxlength="200" value="${esc(mine?.note)}" placeholder="What should friends know?">
+    <label for="note">Note (optional)</label>
+    <textarea id="note" maxlength="5000" rows="3" placeholder="What should friends know?">${esc(mine?.note)}</textarea>
     <p class="muted">Loved and Liked put this in everyone’s feed. You can change your rating anytime.</p>
     <button class="primary big" type="button" data-act="saveRating">${saveLabel}</button></form>`;
 }
