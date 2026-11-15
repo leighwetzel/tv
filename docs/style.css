@@ -66,6 +66,10 @@ label { font-size: calc(var(--base) - 2px); color: var(--muted); font-weight: 70
 .tally { display: flex; gap: 16px; margin-top: 2px; }
 .note.clamp { display: -webkit-box; -webkit-line-clamp: 4; -webkit-box-orient: vertical; overflow: hidden; }
 [hidden] { display: none !important; }
+.me-head { display: flex; gap: 16px; align-items: center; }
+.avatar.lg { width: 88px; height: 88px; font-size: calc(var(--base) + 10px); margin: 0; }
+.photo-actions { gap: 12px; margin-top: 6px; align-items: center; }
+.small-btn { min-height: 44px; padding: 0 14px; font-size: calc(var(--base) - 2px); }
 textarea { padding: 12px 14px; line-height: 1.45; resize: vertical; }
 .readmore { min-height: 36px; padding: 0; }
 .ratings button { gap: 6px; }

@@ -932,7 +932,13 @@ async function viewMe() {
   const canInvite = invitesClosed ? state.me.is_host : true;
   const actText = { loved_your_pick: 'loved your pick', liked_your_pick: 'liked your pick', thanks: 'said thanks for', joined: 'joined from your invite' };
   $app.innerHTML = `
-    <div><h1>${esc(state.me.name)}</h1><span class="muted">${nRatings ?? 0} rating${nRatings === 1 ? '' : 's'}</span></div>
+    <div class="me-head">${avatar(state.me.id).replace('class="avatar"', 'class="avatar lg" id="myAvatar"')}
+      <div><h1>${esc(state.me.name)}</h1><span class="muted">${nRatings ?? 0} rating${nRatings === 1 ? '' : 's'}</span>
+        <div class="row photo-actions">
+          <label class="btn small-btn" for="photoInput">${state.me.avatar_url ? 'Change photo' : 'Add photo'}</label>
+          <input type="file" id="photoInput" accept="image/*" hidden>
+          ${state.me.avatar_url ? '<button class="link small" data-act="removePhoto">Remove</button>' : ''}
+        </div></div></div>
     <div class="field"><label for="myName">Your name, as others see it</label>
       <div class="row" style="flex-wrap:nowrap"><input id="myName" style="flex:1;min-width:0" value="${esc(state.me.name)}" autocomplete="given-name">
       <button class="primary" data-act="saveName">Save</button></div></div>
@@ -979,6 +985,43 @@ actions.toggleEmail = async (d, el) => {
   state.me.weekly_email = !state.me.weekly_email;
   await sb.from('profiles').update({ weekly_email: state.me.weekly_email }).eq('id', state.me.id);
   el.textContent = state.me.weekly_email ? 'On' : 'Off'; el.classList.toggle('on', state.me.weekly_email);
+};
+// Profile photo: crop to a square, shrink to 256px, upload as JPEG, save the address on your profile.
+async function squareJpeg(file, size = 256) {
+  const img = await new Promise((ok, fail) => {
+    const i = new Image(); i.onload = () => ok(i); i.onerror = fail; i.src = URL.createObjectURL(file);
+  });
+  const side = Math.min(img.naturalWidth, img.naturalHeight);
+  const c = document.createElement('canvas'); c.width = c.height = size;
+  c.getContext('2d').drawImage(img, (img.naturalWidth - side) / 2, (img.naturalHeight - side) / 2, side, side, 0, 0, size, size);
+  URL.revokeObjectURL(img.src);
+  return new Promise((ok) => c.toBlob(ok, 'image/jpeg', 0.85));
+}
+async function setAvatar(url) {
+  const { error } = await sb.from('profiles').update({ avatar_url: url }).eq('id', state.me.id);
+  if (error) throw error;
+  state.me.avatar_url = url;
+  const p = state.people.get(state.me.id); if (p) p.avatar_url = url;
+}
+document.addEventListener('change', async (e) => {
+  if (e.target.id !== 'photoInput' || !e.target.files?.[0]) return;
+  try {
+    toast('Uploading photo…');
+    const blob = await squareJpeg(e.target.files[0]);
+    const path = `${state.me.id}/avatar.jpg`;
+    const { error } = await sb.storage.from('avatars').upload(path, blob, { upsert: true, contentType: 'image/jpeg' });
+    if (error) throw error;
+    const { data } = sb.storage.from('avatars').getPublicUrl(path);
+    await setAvatar(`${data.publicUrl}?t=${Date.now()}`); // new address each time so old copies don't linger
+    toast('Photo saved');
+    route();
+  } catch (err) { console.error(err); toast('Couldn’t save that photo. Try another one.'); }
+});
+actions.removePhoto = async () => {
+  await sb.storage.from('avatars').remove([`${state.me.id}/avatar.jpg`]);
+  await setAvatar(null);
+  toast('Photo removed');
+  route();
 };
 actions.saveName = async () => {
   const name = document.getElementById('myName').value.trim();
