@@ -20,3 +20,7 @@ A private friends-and-family app for TV and movie recommendations, at tv.xoleigh
 - `docs/` the app (static site served by GitHub Pages)
 
 Title data and streaming info from TMDB. This product uses the TMDB API but is not endorsed or certified by TMDB. Streaming data from JustWatch.
+
+## Releasing changes
+
+Bump the `?v=` number on `style.css` and `app.js` in `docs/index.html` with every change. Browsers cache both files, and the app reloads itself only when that number changes.
