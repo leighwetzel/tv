@@ -46,7 +46,7 @@ const poster = (path, cls = '') => path
   : `<div class="poster ${cls}" aria-hidden="true"></div>`;
 const kind = (t) => `${t.media_type === 'tv' ? 'TV' : 'Movie'}${t.year ? ' · ' + t.year : ''}`;
 const BRAND = `<header class="brand">
-  <img class="logo" src="icon.svg?v=4" alt="">
+  <img class="logo" src="icon.png?v=5" alt="">
   <div><h1>TV Rex</h1><p class="tagline">Picks from friends and family</p></div></header>`;
 const personLink = (id) => `<a class="person" href="#/friend/${encodeURIComponent(id)}">${esc(nameOf(id))}</a>`;
 const SAVED = '<span class="btn saved">✓ Saved</span>'; // shown in place of + Want to watch once a title is on your list
