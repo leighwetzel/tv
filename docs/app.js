@@ -157,7 +157,7 @@ function watchOn(id) {
   if (all.length) {
     const mine = all.filter(isMine);
     const names = (mine.length ? mine : all).slice(0, 2).map((s) => esc(s.name)).join(', ');
-    return `<span class="watch ${mine.length ? 'mine' : ''}">Watch on <strong>${names}${mine.length ? ' · yours' : ''}</strong></span>`;
+    return `<span class="watch ${mine.length ? 'mine' : ''}">Watch on <strong>${names}</strong></span>`;
   }
   if (p.rent?.length || p.buy?.length) return '<span class="watch muted">Rent or buy only</span>';
   return '<span class="watch muted">Not streaming in the US</span>';
@@ -330,7 +330,7 @@ const HELP = [
   ['Using TV Rex', 'in', [
     ['How do I add something I watched?', 'Tap <b>Add</b> at the bottom. Type the name, tap the right show or movie, pick a rating, and add a note if you like.'],
     ['What do the ratings mean?', '<b>Loved</b> and <b>Liked</b> show up in everyone’s feed. <b>Didn’t like</b> and <b>Gave up</b> only show next to other people’s reviews of the same title, so they never start a new card.'],
-    ['Where can I watch it?', 'Look for <b>Watch on</b> on each card. Services you’ve picked in <b>Me</b> are marked “yours.” Streaming info is from JustWatch, for the US.'],
+    ['Where can I watch it?', 'Look for <b>Watch on</b> on each card. Services you’ve picked in <b>Me</b> are highlighted in blue. Streaming info is from JustWatch, for the US.'],
     ['How do I save something for later?', 'Tap <b>+ Want to watch</b>. It goes to <b>My list</b> at the bottom of the screen.'],
     ['What does “Seen it” do?', 'It lets you rate a title right from the card, without opening it.'],
     ['How do I change or remove my review?', 'Open the show or movie and tap <b>Edit</b> next to your rating.'],
@@ -592,7 +592,7 @@ async function viewTitle(id) {
       </div></div>
     <section class="card watchbox">
       <div class="muted small">WATCH ON</div>
-      ${subs(id).length ? `<div class="row">${subs(id).map((s) => `<span class="chip ${isMine(s) ? 'on' : ''}" style="display:inline-flex;align-items:center">${esc(s.name)}${isMine(s) ? ' · yours' : ''}</span>`).join('')}</div>` : '<p>Not on a subscription service in the US right now.</p>'}
+      ${subs(id).length ? `<div class="row">${subs(id).map((s) => `<span class="chip ${isMine(s) ? 'on' : ''}" style="display:inline-flex;align-items:center">${esc(s.name)}</span>`).join('')}</div>` : '<p>Not on a subscription service in the US right now.</p>'}
       ${p.rent?.length || p.buy?.length ? `<p class="muted">Rent or buy: ${esc([...new Set([...(p.rent ?? []), ...(p.buy ?? [])].map((s) => serviceName(s.name)))].slice(0, 4).join(', '))}</p>` : ''}
       <p class="credits">Streaming data from JustWatch</p>
     </section>
