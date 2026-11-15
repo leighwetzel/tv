@@ -42,7 +42,7 @@ const isMine = (svc) => svc.ids.some((i) => myServices().includes(i));
 
 const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 const poster = (path, cls = '') => path
-  ? `<img class="poster ${cls}" src="${IMG}${cls === 'xl' || cls === 'lg' ? 'w342' : 'w185'}${esc(path)}" alt="" loading="lazy">`
+  ? `<img class="poster ${cls}" src="${IMG}${['xl', 'lg', 'tile'].includes(cls) ? 'w342' : 'w185'}${esc(path)}" alt="" loading="lazy">`
   : `<div class="poster ${cls}" aria-hidden="true"></div>`;
 const kind = (t) => `${t.media_type === 'tv' ? 'TV' : 'Movie'}${t.year ? ' · ' + t.year : ''}`;
 const BRAND = `<header class="brand">
@@ -838,7 +838,7 @@ async function viewMe() {
   const [{ data: acts }, { count: nRatings }, { data: myRecent }, { error: invitesClosed }, { data: keys, error: keysErr }, { data: reqs, error: reqsErr }, { data: inbox }] = await Promise.all([
     sb.from('activity').select('*, titles(name)').order('created_at', { ascending: false }).limit(20),
     sb.from('ratings').select('title_id', { count: 'exact', head: true }).eq('user_id', state.me.id),
-    sb.from('ratings').select('rating, title_id, titles(id, name, media_type)').eq('user_id', state.me.id).order('activity_at', { ascending: false }).limit(5),
+    sb.from('ratings').select('rating, title_id, titles(id, name, media_type, poster_path)').eq('user_id', state.me.id).order('activity_at', { ascending: false }).limit(SHELF_MAX + 1),
     sb.rpc('my_open_invites'), // missing until migration 006: then only hosts invite
     canPasskey() ? sb.auth.passkey.list() : Promise.resolve({ error: true }),
     // Invite requests: only the person in request_inbox gets rows back (migration 007); everyone else gets none.
@@ -875,8 +875,8 @@ async function viewMe() {
     ${keysErr ? '' : `<div class="list"><div class="item"><span><strong>Sign in with ${bioName()}</strong> <span class="muted">· ${faceOn ? 'On' : 'Off'}</span></span>
       ${faceOn ? '' : `<button data-act="addPasskey">Turn on</button>`}</div></div>`}
     ${state.followsReady ? `<div class="list"><a class="item" href="#/following"><span><strong>Following</strong> <span class="muted">· ${state.following.size} ${state.following.size === 1 ? 'person' : 'people'}</span></span><span class="muted">›</span></a></div>` : ''}
-    <div class="spread"><h2>My picks</h2><a class="small" href="#/friend/${state.me.id}">See all</a></div>
-    ${myRecent?.length ? `<div class="list">${myRecent.map((r) => `<a class="item" href="${titleLink(r.titles)}"><span><strong>${esc(r.titles.name)}</strong> <span class="muted">· ${RATING[r.rating]}</span></span><span class="muted">›</span></a>`).join('')}</div>`
+    <div class="spread shelf-head"><h2>My picks</h2><a class="small" href="#/friend/${state.me.id}">See all</a></div>
+    ${myRecent?.length ? shelf(myRecent, `#/friend/${state.me.id}/all`)
       : '<p class="muted">Nothing rated yet. Tap Add to rate a show.</p>'}
     <div class="list">
       <div class="spread"><span>Weekly email (Sundays)</span><button class="chip ${state.me.weekly_email ? 'on' : ''}" data-act="toggleEmail">${state.me.weekly_email ? 'On' : 'Off'}</button></div>
@@ -968,41 +968,76 @@ function viewAbout() {
 
 // ---------------------------------------------------------------- friend profile
 
+// Poster row that scrolls sideways (like Goodreads' "Recently read"). Each poster opens the title.
+const SHELF_MAX = 12;
+function shelf(rows, seeAll) {
+  return `<div class="shelf">${rows.slice(0, SHELF_MAX).map((r) => `<a href="${titleLink(r.titles)}">
+      ${poster(r.titles.poster_path, 'tile')}<span class="t">${esc(r.titles.name)}</span></a>`).join('')}
+    ${rows.length > SHELF_MAX ? `<a class="shelf-more" href="${seeAll}">See all ›</a>` : ''}</div>`;
+}
+
+// Profile: a summary (counts plus poster rows). The full list is one tap away, a page at a time.
 async function viewFriend(id, filter) {
   await loadPeople();
   const p = state.people.get(id);
   if (!p) { $app.innerHTML = '<p class="empty">Not found.</p>'; return; }
   const { data: rs } = await sb.from('ratings').select('user_id, title_id, rating, note, season, activity_at, titles(*)').eq('user_id', id).order('activity_at', { ascending: false });
+  if (!filter) return friendSummary(id, p, rs ?? []);
+  return friendList(id, p, rs ?? [], filter);
+}
+
+function friendSummary(id, p, rs) {
+  const of = (k) => rs.filter((r) => r.rating === k);
+  const base = `#/friend/${encodeURIComponent(id)}`;
+  const stat = (n, label, f) => `<a href="${base}/${f}"><strong>${n}</strong><span>${label}</span></a>`;
+  const section = (k, label) => of(k).length ? `<div class="spread shelf-head"><h2>${label}</h2><a class="small" href="${base}/${k}">See all ${of(k).length}</a></div>${shelf(of(k), `${base}/${k}`)}` : '';
+  const mixed = rs.filter((r) => !POSITIVE.includes(r.rating));
+  $app.innerHTML = `
+    <a href="javascript:history.back()">← Back</a>
+    <div class="spread"><h1>${esc(isMe(id) ? 'My picks' : p.name)}</h1>
+      ${!isMe(id) && state.followsReady ? followButton(id) : ''}</div>
+    <div class="stats">${stat(rs.length, rs.length === 1 ? 'Rating' : 'Ratings', 'all')}${stat(of('loved').length, 'Loved', 'loved')}${stat(of('liked').length, 'Liked', 'liked')}</div>
+    ${rs.length ? `<div class="spread shelf-head"><h2>Recently rated</h2><a class="small" href="${base}/all">See all</a></div>${shelf(rs, `${base}/all`)}` : '<p class="empty">Nothing rated yet.</p>'}
+    ${section('loved', 'Loved')}
+    ${section('liked', 'Liked')}
+    ${mixed.length ? `<a class="btn big" href="${base}/mixed">Didn’t like or gave up · ${mixed.length}</a>` : ''}`;
+}
+
+const PAGE = 20;
+async function friendList(id, p, all, filter, limit = PAGE) {
   const [{ data: wl }, { data: myR }] = await Promise.all([
     sb.from('watchlist').select('title_id').is('watched_at', null),
     sb.from('ratings').select('title_id, rating, season').eq('user_id', state.me.id),
   ]);
   const saved = new Set((wl ?? []).map((w) => w.title_id));
   const myRating = new Map((myR ?? []).map((r) => [r.title_id, r]));
-  const count = (k) => (rs ?? []).filter((r) => r.rating === k).length;
-  const tabs = POSITIVE.filter((k) => count(k)); // Loved and Liked show only if not empty
-  if (filter !== 'all' && !tabs.includes(filter)) filter = tabs[0] ?? 'all';
-  const shown = (rs ?? []).filter((r) => filter === 'all' || r.rating === filter);
-  const segBtn = (val, label) => `<button class="${filter === val ? 'on' : ''}" data-act="friendFilter" data-id="${id}" data-val="${val}" aria-pressed="${filter === val}">${label}</button>`;
+  const match = (r) => filter === 'all' || (filter === 'mixed' ? !POSITIVE.includes(r.rating) : r.rating === filter);
+  const matching = all.filter(match);
+  const shown = matching.slice(0, limit);
+  const heading = { all: 'All ratings', loved: 'Loved', liked: 'Liked', mixed: 'Didn’t like or gave up' }[filter] ?? 'All ratings';
   await loadProviders(shown.map((r) => r.title_id));
   $app.innerHTML = `
-    <a href="javascript:history.back()">← Back</a>
-    <div class="spread"><div><h1>${esc(isMe(id) ? 'My picks' : p.name)}</h1>
-      <span class="muted">${(rs ?? []).length} rating${(rs ?? []).length === 1 ? '' : 's'}</span></div>
-      ${!isMe(id) && state.followsReady ? followButton(id) : ''}</div>
-    ${tabs.length ? `<div class="seg" role="group" aria-label="Rating">${tabs.map((k) => segBtn(k, RATING[k])).join('')}${segBtn('all', 'All')}</div>` : ''}
+    <a href="#/friend/${encodeURIComponent(id)}">← ${esc(isMe(id) ? 'My picks' : p.name)}</a>
+    <div><h1>${heading}</h1><span class="muted">${matching.length} title${matching.length === 1 ? '' : 's'}</span></div>
     ${shown.length ? shown.map((r) => `<div class="card pick-card"><div class="pick">
       <a href="${titleLink(r.titles)}">${poster(r.titles.poster_path, 'sm')}</a>
       <div class="pick-body"><a class="title" href="${titleLink(r.titles)}">${esc(r.titles.name)}</a>
-        <span class="muted">${filter === 'all' ? ratingLabel(r) + ' · ' : ''}${kind(r.titles)}${filter !== 'all' && r.season ? ' · S' + r.season : ''}</span>${watchOn(r.title_id)}
+        <span class="muted">${filter === 'all' || filter === 'mixed' ? ratingLabel(r) + ' · ' : ''}${kind(r.titles)}${filter !== 'all' && filter !== 'mixed' && r.season ? ' · S' + r.season : ''}</span>${watchOn(r.title_id)}
         ${r.note ? `<div class="note">“${esc(r.note)}”</div>` : ''}</div></div>
       ${isMe(id) ? '' : `<div class="row actions">${myRating.has(r.title_id) ? `<span class="muted">You: <strong>${ratingLabel(myRating.get(r.title_id))}</strong></span>`
         : saved.has(r.title_id) ? SAVED
         : `<button class="primary" data-act="save" data-id="${esc(r.title_id)}">+ Want to watch</button>`}
         ${myRating.has(r.title_id) ? '' : `<button data-act="seenIt" data-id="${esc(r.title_id)}">Seen it</button>`}</div>`}</div>`).join('')
-      : `<p class="empty">${filter === 'all' ? 'Nothing rated yet.' : `No ${RATING[filter]} titles yet.`}</p>`}`;
+      : '<p class="empty">Nothing here yet.</p>'}
+    ${matching.length > shown.length ? `<button class="big" data-act="friendMore">Show more · ${matching.length - shown.length} left</button>` : ''}`;
+  state.friendCtx = { id, p, all, filter, limit };
 }
-actions.friendFilter = (d) => viewFriend(d.id, d.val);
+actions.friendMore = async () => {
+  const { id, p, all, filter, limit } = state.friendCtx;
+  const y = window.scrollY;
+  await friendList(id, p, all, filter, limit + PAGE);
+  window.scrollTo(0, y);
+};
 
 // ---------------------------------------------------------------- following
 const followButton = (id) => state.following.has(id)

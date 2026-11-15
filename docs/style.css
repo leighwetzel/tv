@@ -45,13 +45,13 @@ input[type=text], input[type=email], input[type=search], input:not([type]), sele
 label { font-size: calc(var(--base) - 2px); color: var(--muted); font-weight: 700; }
 .field { display: flex; flex-direction: column; gap: 8px; }
 
-.card { background: var(--card); border: 1.5px solid var(--line); border-radius: 14px; padding: 14px; }
+.card { background: var(--card); border: 1.5px solid var(--line); border-radius: 0; padding: 14px; }
 .pick-card { display: flex; flex-direction: column; }
 .pick { display: flex; gap: 14px; }
-.poster { width: 80px; height: 120px; flex: none; border-radius: 6px; background: var(--soft); object-fit: cover; display: block; }
-.poster.lg { width: 128px; height: 192px; border-radius: 8px; }
-.poster.xl { width: 180px; height: 270px; border-radius: 10px; }
-.poster.sm { width: 56px; height: 84px; border-radius: 5px; }
+.poster { width: 80px; height: 120px; flex: none; border-radius: 0; background: var(--soft); object-fit: cover; display: block; }
+.poster.lg { width: 128px; height: 192px; }
+.poster.xl { width: 180px; height: 270px; }
+.poster.sm { width: 56px; height: 84px; }
 .pick-body { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 4px; }
 .title { font-weight: 700; font-size: calc(var(--base) + 4px); line-height: 1.15; color: var(--ink); text-decoration: none; }
 .review { border-top: 1px solid var(--line); padding-top: 10px; margin-top: 10px; }
@@ -70,7 +70,7 @@ a.more { align-self: flex-start; min-height: 44px; display: inline-flex; align-i
 .actions button.primary, .actions .saved { flex-grow: 2; }
 .btn.saved { background: var(--soft); border-color: var(--soft); color: var(--muted); cursor: default; white-space: nowrap; padding: 0 14px; }
 .actions a { min-height: 44px; display: inline-flex; align-items: center; }
-.list { background: var(--card); border: 1.5px solid var(--line); border-radius: 14px; }
+.list { background: var(--card); border: 1.5px solid var(--line); border-radius: 0; }
 .list > * { padding: 12px 14px; border-top: 1px solid var(--line); margin-top: 0; }
 .list > *:first-child { border-top: 0; }
 .list a.item { display: flex; justify-content: space-between; align-items: center; gap: 8px; min-height: 52px; color: var(--ink); text-decoration: none; font-weight: 400; }
@@ -94,6 +94,21 @@ a.more { align-self: flex-start; min-height: 44px; display: inline-flex; align-i
 .brand .logo { width: 50px; height: 50px; flex: none; }
 .brand h1 { color: var(--ink); font-size: calc(var(--base) + 14px); line-height: 1; letter-spacing: .02em; }
 .tagline { color: var(--muted); font-size: calc(var(--base) - 2px); margin-top: 4px; }
+
+/* Profile: counts and sideways poster rows */
+.stats { display: grid; grid-template-columns: repeat(3, 1fr); background: var(--card); border: 1.5px solid var(--line); }
+.stats a { display: flex; flex-direction: column; align-items: center; justify-content: center; min-height: 84px; padding: 8px 4px; color: var(--ink); text-decoration: none; border-left: 1.5px solid var(--line); }
+.stats a:first-child { border-left: 0; }
+.stats strong { font-size: calc(var(--base) + 12px); line-height: 1.1; }
+.stats span { font-size: calc(var(--base) - 2px); color: var(--muted); font-weight: 400; }
+.shelf-head h2 { margin: 8px 0 0; }
+.shelf-head a { min-height: 44px; display: inline-flex; align-items: flex-end; }
+.shelf { display: flex; gap: 12px; overflow-x: auto; margin: -6px -16px 0; padding: 0 16px 6px; scroll-snap-type: x proximity; scroll-padding: 0 16px; scrollbar-width: none; -webkit-overflow-scrolling: touch; }
+.shelf::-webkit-scrollbar { display: none; }
+.shelf > a { flex: none; width: 104px; color: var(--ink); text-decoration: none; font-weight: 400; scroll-snap-align: start; display: flex; flex-direction: column; gap: 6px; }
+.poster.tile { width: 104px; height: 156px; border: 1px solid var(--line); }
+.shelf .t { font-size: calc(var(--base) - 3px); line-height: 1.25; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+.shelf > a.shelf-more { height: 156px; align-items: center; justify-content: center; text-align: center; border: 1.5px solid var(--line); background: var(--card); color: var(--accent); font-weight: 700; }
 
 /* Help */
 .help-link { align-self: center; min-height: 44px; display: inline-flex; align-items: center; }
