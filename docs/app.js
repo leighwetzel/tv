@@ -986,16 +986,11 @@ actions.toggleEmail = async (d, el) => {
   await sb.from('profiles').update({ weekly_email: state.me.weekly_email }).eq('id', state.me.id);
   el.textContent = state.me.weekly_email ? 'On' : 'Off'; el.classList.toggle('on', state.me.weekly_email);
 };
-// Profile photo: crop to a square, shrink to 256px, upload as JPEG, save the address on your profile.
-async function squareJpeg(file, size = 256) {
-  const img = await new Promise((ok, fail) => {
+// Profile photo: pick a picture, drag and zoom it inside the circle, then upload a 256px square JPEG.
+function loadImage(file) {
+  return new Promise((ok, fail) => {
     const i = new Image(); i.onload = () => ok(i); i.onerror = fail; i.src = URL.createObjectURL(file);
   });
-  const side = Math.min(img.naturalWidth, img.naturalHeight);
-  const c = document.createElement('canvas'); c.width = c.height = size;
-  c.getContext('2d').drawImage(img, (img.naturalWidth - side) / 2, (img.naturalHeight - side) / 2, side, side, 0, 0, size, size);
-  URL.revokeObjectURL(img.src);
-  return new Promise((ok) => c.toBlob(ok, 'image/jpeg', 0.85));
 }
 async function setAvatar(url) {
   const { error } = await sb.from('profiles').update({ avatar_url: url }).eq('id', state.me.id);
@@ -1003,19 +998,69 @@ async function setAvatar(url) {
   state.me.avatar_url = url;
   const p = state.people.get(state.me.id); if (p) p.avatar_url = url;
 }
+async function uploadAvatar(blob) {
+  const path = `${state.me.id}/avatar.jpg`;
+  const { error } = await sb.storage.from('avatars').upload(path, blob, { upsert: true, contentType: 'image/jpeg' });
+  if (error) throw error;
+  const { data } = sb.storage.from('avatars').getPublicUrl(path);
+  await setAvatar(`${data.publicUrl}?t=${Date.now()}`); // new address each time so old copies don't linger
+}
+function openCropper(img) {
+  const V = Math.min(300, window.innerWidth - 64); // size of the square frame on screen
+  const W = img.naturalWidth, H = img.naturalHeight;
+  const cover = V / Math.min(W, H);                 // smallest scale that still fills the circle
+  let zoom = 1, x = 0, y = 0;
+  const box = document.createElement('div');
+  box.className = 'cropper';
+  box.innerHTML = `<div class="cropper-panel" role="dialog" aria-modal="true" aria-label="Adjust your photo">
+      <h2>Adjust your photo</h2>
+      <p class="muted">Drag to move. Use the slider to zoom.</p>
+      <div class="crop-frame" style="width:${V}px;height:${V}px"><img alt="" draggable="false"><div class="crop-ring"></div></div>
+      <label class="crop-zoom"><span class="muted">Zoom</span><input type="range" min="1" max="4" step="0.01" value="1"></label>
+      <div class="row"><button data-crop="cancel">Cancel</button><button class="primary" data-crop="save">Save photo</button></div>
+    </div>`;
+  document.body.appendChild(box);
+  const pic = box.querySelector('img'), frame = box.querySelector('.crop-frame'), slider = box.querySelector('input');
+  pic.src = img.src;
+  const size = () => ({ w: W * cover * zoom, h: H * cover * zoom });
+  function draw() {
+    const { w, h } = size();
+    x = Math.min(0, Math.max(V - w, x)); y = Math.min(0, Math.max(V - h, y)); // keep the circle filled
+    pic.style.width = `${w}px`; pic.style.height = `${h}px`; pic.style.transform = `translate(${x}px, ${y}px)`;
+  }
+  { const { w, h } = size(); x = (V - w) / 2; y = (V - h) / 2; } // start centered
+  draw();
+  slider.addEventListener('input', () => {
+    const old = size(), cx = (V / 2 - x) / old.w, cy = (V / 2 - y) / old.h; // zoom around the middle
+    zoom = Number(slider.value);
+    const now = size(); x = V / 2 - cx * now.w; y = V / 2 - cy * now.h; draw();
+  });
+  let drag = null;
+  frame.addEventListener('pointerdown', (e) => { drag = { px: e.clientX, py: e.clientY, x, y }; frame.setPointerCapture(e.pointerId); });
+  frame.addEventListener('pointermove', (e) => { if (!drag) return; x = drag.x + e.clientX - drag.px; y = drag.y + e.clientY - drag.py; draw(); });
+  frame.addEventListener('pointerup', () => { drag = null; });
+  frame.addEventListener('pointercancel', () => { drag = null; });
+  const close = () => { URL.revokeObjectURL(img.src); box.remove(); };
+  box.addEventListener('click', async (e) => {
+    const act = e.target.closest('[data-crop]')?.dataset.crop;
+    if (act === 'cancel') return close();
+    if (act !== 'save') return;
+    e.target.disabled = true; e.target.textContent = 'Saving…';
+    try {
+      const scale = cover * zoom, c = document.createElement('canvas');
+      c.width = c.height = 256;
+      c.getContext('2d').drawImage(img, -x / scale, -y / scale, V / scale, V / scale, 0, 0, 256, 256);
+      const blob = await new Promise((ok) => c.toBlob(ok, 'image/jpeg', 0.85));
+      await uploadAvatar(blob);
+      close(); toast('Photo saved'); route();
+    } catch (err) { console.error(err); e.target.disabled = false; e.target.textContent = 'Save photo'; toast('Couldn’t save that photo. Try again.'); }
+  });
+}
 document.addEventListener('change', async (e) => {
   if (e.target.id !== 'photoInput' || !e.target.files?.[0]) return;
-  try {
-    toast('Uploading photo…');
-    const blob = await squareJpeg(e.target.files[0]);
-    const path = `${state.me.id}/avatar.jpg`;
-    const { error } = await sb.storage.from('avatars').upload(path, blob, { upsert: true, contentType: 'image/jpeg' });
-    if (error) throw error;
-    const { data } = sb.storage.from('avatars').getPublicUrl(path);
-    await setAvatar(`${data.publicUrl}?t=${Date.now()}`); // new address each time so old copies don't linger
-    toast('Photo saved');
-    route();
-  } catch (err) { console.error(err); toast('Couldn’t save that photo. Try another one.'); }
+  try { openCropper(await loadImage(e.target.files[0])); }
+  catch (err) { console.error(err); toast('Couldn’t open that photo. Try another one.'); }
+  e.target.value = ''; // so picking the same photo again still works
 });
 actions.removePhoto = async () => {
   await sb.storage.from('avatars').remove([`${state.me.id}/avatar.jpg`]);

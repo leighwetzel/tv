@@ -69,6 +69,16 @@ label { font-size: calc(var(--base) - 2px); color: var(--muted); font-weight: 70
 .me-head { display: flex; gap: 16px; align-items: center; }
 .avatar.lg { width: 88px; height: 88px; font-size: calc(var(--base) + 10px); margin: 0; }
 .photo-actions { gap: 12px; margin-top: 6px; align-items: center; }
+.cropper { position: fixed; inset: 0; background: rgba(0, 0, 0, .55); z-index: 30; display: flex; align-items: center; justify-content: center; padding: 16px; }
+.cropper-panel { background: var(--card); padding: 20px; display: flex; flex-direction: column; gap: 12px; align-items: center; max-width: 100%; }
+.cropper-panel h2, .cropper-panel p { margin: 0; text-align: center; }
+.crop-frame { position: relative; overflow: hidden; background: #000; touch-action: none; cursor: grab; }
+.crop-frame img { position: absolute; left: 0; top: 0; max-width: none; user-select: none; -webkit-user-select: none; pointer-events: none; }
+.crop-ring { position: absolute; inset: 0; border-radius: 50%; box-shadow: 0 0 0 999px rgba(0, 0, 0, .5); pointer-events: none; }
+.crop-zoom { display: flex; align-items: center; gap: 12px; width: 100%; }
+.crop-zoom input { flex: 1; min-height: 44px; }
+.cropper-panel .row { width: 100%; gap: 8px; }
+.cropper-panel .row button { flex: 1; }
 .small-btn { min-height: 44px; padding: 0 14px; font-size: calc(var(--base) - 2px); }
 textarea { padding: 12px 14px; line-height: 1.45; resize: vertical; }
 .readmore { min-height: 36px; padding: 0; }
