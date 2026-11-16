@@ -77,6 +77,11 @@ const kind = (t) => `${t.media_type === 'tv' ? 'TV' : 'Movie'}${t.year ? ' · ' 
 const BRAND = `<header class="brand">
   <img class="logo" src="icon.png?v=5" alt="">
   <div><h1>TV Rex</h1><p class="tagline">Picks from friends and family</p></div></header>`;
+const FOOTER = `<footer class="appfooter">
+  <a class="other" href="https://walk.xoleigh.com"><img src="https://walk.xoleigh.com/icons/icon-192.png?v=4" alt="">
+    <span><strong>Also try Wiki Walk</strong><span class="muted">Nearby Wikipedia, read aloud</span></span><span class="muted" aria-hidden="true">›</span></a>
+  <div class="links"><a href="#/feedback">Feedback</a><a href="https://xoleigh.com">xoleigh.com</a></div>
+</footer>`;
 const personLink = (id) => `<a class="person" href="#/friend/${encodeURIComponent(id)}">${esc(nameOf(id))}</a>`;
 const SAVED = '<span class="btn saved">✓ Saved</span>';
 const WATCHING = '<span class="btn saved">✓ Watching</span>'; // shown in place of + Want to watch once a title is on your list
@@ -215,7 +220,7 @@ function watchOn(id) {
 
 const routes = {
   feed: viewFeed, title: viewTitle, add: viewAdd, quickpick: viewQuickpick,
-  list: viewList, me: viewMe, invites: viewInvites, friend: viewFriend, welcome: viewWelcome, about: viewAbout, following: viewFollowing, passkey: viewPasskey, help: viewHelp,
+  list: viewList, me: viewMe, invites: viewInvites, feedback: viewFeedback, friend: viewFriend, welcome: viewWelcome, about: viewAbout, following: viewFollowing, passkey: viewPasskey, help: viewHelp,
 };
 
 async function route() {
@@ -227,6 +232,7 @@ async function route() {
     $nav.hidden = true;
     if (location.hash.startsWith('#/help')) return viewHelp();
     if (location.hash.startsWith('#/request')) return viewRequest();
+    if (location.hash.startsWith('#/feedback')) return viewFeedback(location.hash.split('/')[2]); // Wiki Walk sends people here, signed in or not
     return viewSignIn();
   }
   if (!state.me) await loadPeople();
@@ -235,7 +241,7 @@ async function route() {
   if (/access_token|error_description/.test(location.hash)) return;
   const [name, ...rest] = location.hash.replace(/^#\/?/, '').split('/');
   let view = routes[name] ? name : 'feed';
-  if (state.me.is_member === false) { $nav.hidden = true; return name === 'request' ? viewRequest() : viewNotMember(); }
+  if (state.me.is_member === false) { $nav.hidden = true; return name === 'request' ? viewRequest() : name === 'feedback' ? viewFeedback(rest[0]) : viewNotMember(); }
   if (!state.me.onboarded && view !== 'quickpick' && view !== 'about' && view !== 'passkey' && view !== 'help') view = 'welcome';
 
   $nav.hidden = view === 'welcome';
@@ -250,8 +256,11 @@ window.addEventListener('hashchange', route);
 
 async function updateActivityDot() {
   // Activity section was removed from Me (Nov 16), so only new invite requests light the dot.
-  const { count: reqs } = await sb.from('invite_requests').select('id', { count: 'exact', head: true }).is('handled', null); // 0 unless you get requests
-  const count = 0;
+  const [{ count: reqs }, { count: fb }] = await Promise.all([
+    sb.from('invite_requests').select('id', { count: 'exact', head: true }).is('handled', null), // 0 unless you get requests
+    sb.from('feedback').select('id', { count: 'exact', head: true }).is('resolved_at', null),   // 0 unless you're the inbox
+  ]);
+  const count = fb ?? 0;
   const me = $nav.querySelector('[data-tab=me]');
   me.querySelector('.dot')?.remove();
   if (count || reqs) me.insertAdjacentHTML('beforeend', '<span class="dot" aria-label="new activity"></span>');
@@ -568,7 +577,8 @@ async function renderFeed({ rows, wl }) {
     ${list.length ? list.slice(0, limit).map((c) => feedCard(c, saved)).join('') + (list.length > limit
       ? `<button class="big" data-act="feedMore">Show more · ${list.length - limit} left</button><p class="muted" style="text-align:center;margin:0">Showing ${limit} of ${list.length} titles</p>` : '')
       : following && !state.following.size ? '<p class="empty">You’re not following anyone yet. In Everyone, tap a name on a review, then tap Follow.</p>'
-      : `<p class="empty">No picks yet. ${state.people.size <= 1 ? 'Once others join, their picks show up here.' : 'Rate something to get things going.'}</p>`}`;
+      : `<p class="empty">No picks yet. ${state.people.size <= 1 ? 'Once others join, their picks show up here.' : 'Rate something to get things going.'}</p>`}
+    ${FOOTER}`;
 }
 actions.feedPeople = (d) => { state.feedPeople = d.val; state.feedLimit = FEED_PAGE; route(); };
 actions.feedMore = async () => {
@@ -1044,6 +1054,7 @@ async function viewMe() {
     sb.from('invite_requests').select('id, name, email, knows, created_at').is('handled', null).order('created_at', { ascending: false }).limit(50),
     sb.rpc('gets_invite_requests'), // true only for you, so the section (and any error) shows only to you
   ]);
+  const { data: fbs } = await sb.from('feedback').select('*').is('resolved_at', null).order('created_at', { ascending: false }).limit(50); // only you get rows
   const myInvites = await loadMyInvites();
   if (reqsErr) console.error('invite_requests', reqsErr);
   const faceOn = !keysErr && Array.isArray(keys) && keys.length > 0;
@@ -1068,6 +1079,12 @@ async function viewMe() {
         <span class="muted small">${esc(r.email)} · ${when(r.created_at)}</span>
         <div class="row"><button class="primary" data-act="inviteRequest" data-id="${r.id}" data-email="${esc(r.email)}" data-name="${esc(r.name)}">Email invite</button>
           <button data-act="skipRequest" data-id="${r.id}">Not now</button></div></div>`).join('')}</div></section>` : ''}
+    ${fbs?.length ? `<section class="requests"><h2>Feedback <span class="pill">${fbs.length} open</span></h2>
+      <div class="list">${fbs.map((f) => `<div class="req" id="fb${f.id}">
+        <span><strong>${f.kind === 'bug' ? 'Bug' : 'Suggestion'}</strong> · ${FB_APPS[f.app]}</span>
+        <div class="note">${esc(f.message)}</div>
+        <span class="muted small">${f.user_id ? personLink(f.user_id) : esc(f.name)} · ${when(f.created_at)}</span>
+        <div class="row"><button data-act="resolveFeedback" data-id="${f.id}">Resolve</button></div></div>`).join('')}</div></section>` : ''}
     <h2>My services</h2>
     <p class="muted">Used for the My services filter and highlights.</p>
     <div class="row" id="svc">${serviceChips('toggleMySvc')}</div>
@@ -1086,7 +1103,8 @@ async function viewMe() {
       <a class="item" href="#/about"><span>About and credits</span><span class="muted">›</span></a>
       <button class="link" data-act="signOut">Sign out</button>
       <button class="link danger" data-act="deleteAccount">Delete my account</button>
-    </div>`;
+    </div>
+    ${FOOTER}`;
 }
 actions.toggleMySvc = async (d, el) => {
   actions.toggleSvc(d, el);
@@ -1268,6 +1286,54 @@ function viewAbout() {
     <p>A private place for friends and family to share what they’re watching.</p>
     <p class="credits">This product uses the TMDB API but is not endorsed or certified by TMDB. Title data and images from <a href="https://www.themoviedb.org">TMDB</a>. Streaming data from <a href="https://www.justwatch.com">JustWatch</a>. Dinosaur from <a href="https://github.com/googlefonts/noto-emoji">Noto Emoji</a> (Apache 2.0).</p>`;
 }
+
+// ---------------------------------------------------------------- feedback
+
+const FB_APPS = { tv: 'TV Rex', walk: 'Wiki Walk', other: 'Other' };
+// Open to everyone: Wiki Walk links here (#/feedback/walk). Signed in, your name is filled in for you.
+function viewFeedback(app) {
+  state.fb = { app: FB_APPS[app] ? app : 'tv', kind: 'bug' };
+  const signedIn = !!state.me;
+  const seg = (key, opts) => `<div class="seg" role="group">${opts.map(([v, l]) =>
+    `<button type="button" class="${state.fb[key] === v ? 'on' : ''}" aria-pressed="${state.fb[key] === v}" data-act="pickFb" data-key="${key}" data-val="${v}">${l}</button>`).join('')}</div>`;
+  const fromWalk = app === 'walk';
+  $nav.hidden = !signedIn || state.me.is_member === false;
+  $app.innerHTML = `
+    ${fromWalk ? '<a href="https://walk.xoleigh.com">← Wiki Walk</a>' : signedIn ? '<a href="javascript:history.back()">← Back</a>' : BRAND}
+    <h1>Feedback</h1>
+    <form class="field" id="fbForm" onsubmit="return false">
+      <label>Which app?</label>${seg('app', Object.entries(FB_APPS))}
+      <label>Bug or suggestion?</label>${seg('kind', [['bug', 'Bug'], ['suggestion', 'Suggestion']])}
+      <label for="fbMsg">Tell me more</label>
+      <textarea id="fbMsg" rows="5" maxlength="2000"></textarea>
+      ${signedIn ? '' : '<label for="fbName">Your name</label><input id="fbName" maxlength="80" autocomplete="name">'}
+      <button class="primary big" type="button" data-act="sendFeedback">Submit</button>
+    </form>`;
+}
+actions.pickFb = (d, el) => {
+  state.fb[d.key] = d.val;
+  el.parentElement.querySelectorAll('button').forEach((b) => { b.classList.toggle('on', b === el); b.setAttribute('aria-pressed', b === el); });
+};
+actions.sendFeedback = async (d, el) => {
+  const message = document.getElementById('fbMsg').value.trim();
+  const name = document.getElementById('fbName')?.value.trim() ?? '';
+  if (!message) return toast('Tell me a little more first');
+  if (!state.me && !name) return toast('Add your name so Leigh can reply');
+  el.disabled = true;
+  const { data, error } = await sb.rpc('send_feedback', { p_app: state.fb.app, p_kind: state.fb.kind, p_message: message, p_name: name });
+  if (error || !data) { el.disabled = false; return toast('Couldn’t send. Try again.'); }
+  const back = location.hash.startsWith('#/feedback/walk') ? '<a class="btn big" href="https://walk.xoleigh.com">Back to Wiki Walk</a>'
+    : state.me ? '<a class="btn big" href="#/feed">Back to the feed</a>' : '';
+  $app.innerHTML = `<h1>Thanks!</h1><p>Leigh will see this and get back to you.</p>${back}`;
+};
+actions.resolveFeedback = async (d, el) => {
+  el.disabled = true;
+  const { error } = await sb.from('feedback').update({ resolved_at: new Date().toISOString() }).eq('id', d.id);
+  if (error) { el.disabled = false; throw error; }
+  document.getElementById('fb' + d.id)?.remove();
+  toast('Resolved');
+  updateActivityDot();
+};
 
 // ---------------------------------------------------------------- my invites
 
