@@ -522,7 +522,10 @@ async function viewFeed() {
   storeSet(feedKey(), fresh);
   await renderFeed(fresh);
 }
+const FEED_PAGE = 20; // titles per batch; Show more adds another batch
 async function renderFeed({ rows, wl }) {
+  state.feedLast = { rows, wl };
+  const limit = state.feedLimit ?? FEED_PAGE;
 
   // Quick-pick ratings without a note become one summary line per person.
   const isQuiet = (r) => r.source === 'quickpick' && !r.note;
@@ -560,11 +563,19 @@ async function renderFeed({ rows, wl }) {
       ${[['all', 'Everyone'], ['following', 'Following']].map(([v, l]) => `<button role="tab" class="${state.feedPeople === v ? 'on' : ''}" aria-selected="${state.feedPeople === v}" data-act="feedPeople" data-val="${v}">${l}</button>`).join('')}</div>` : ''}
     ${filterBar('feed')}
     ${[...summary].map(([id, n]) => `<p class="muted"><a href="#/friend/${id}">${esc(nameOf(id))}</a> rated ${n} title${n > 1 ? 's' : ''} in quick-pick this week</p>`).join('')}
-    ${list.length ? list.map((c) => feedCard(c, saved)).join('')
+    ${list.length ? list.slice(0, limit).map((c) => feedCard(c, saved)).join('') + (list.length > limit
+      ? `<button class="big" data-act="feedMore">Show more · ${list.length - limit} left</button><p class="muted" style="text-align:center;margin:0">Showing ${limit} of ${list.length} titles</p>` : '')
       : following && !state.following.size ? '<p class="empty">You’re not following anyone yet. In Everyone, tap a name on a review, then tap Follow.</p>'
       : `<p class="empty">No picks yet. ${state.people.size <= 1 ? 'Once others join, their picks show up here.' : 'Rate something to get things going.'}</p>`}`;
 }
-actions.feedPeople = (d) => { state.feedPeople = d.val; route(); };
+actions.feedPeople = (d) => { state.feedPeople = d.val; state.feedLimit = FEED_PAGE; route(); };
+actions.feedMore = async () => {
+  const y = window.scrollY;
+  state.feedLimit = (state.feedLimit ?? FEED_PAGE) + FEED_PAGE;
+  await renderFeed(state.feedLast);
+  markLongNotes();
+  window.scrollTo(0, y);
+};
 
 // Filters: one "Showing … / Filter" line; the choices slide up in a panel.
 const TYPE = ['Show', [['all', 'All'], ['tv', 'TV'], ['movie', 'Movies']]];
@@ -592,7 +603,7 @@ function filterBar(name) {
 let filtersChanged = false;
 actions.openFilters = () => { document.body.classList.add('sheet-open'); document.querySelector('.sheet')?.focus(); };
 actions.pickFilter = (d, el) => {
-  state[d.key] = d.val; filtersChanged = true;
+  state[d.key] = d.val; filtersChanged = true; state.feedLimit = FEED_PAGE; // new filter: start the feed over
   el.parentElement.querySelectorAll('button').forEach((b) => { b.classList.toggle('on', b === el); b.setAttribute('aria-pressed', b === el); });
 };
 actions.closeFilters = () => {
@@ -785,16 +796,31 @@ async function viewAdd() {
   q.oninput = () => {
     clearTimeout(searchTimer);
     searchTimer = setTimeout(async () => {
+      const asked = q.value;
       const box = document.getElementById('results');
       if (q.value.trim().length < 2) { box.innerHTML = ''; return; }
       const { results } = await fn('search', { q: q.value });
       for (const t of results) searchCache.set(t.id, t);
+      if (q.value !== asked) return; // typing moved on
       box.innerHTML = results.length ? `<div class="list">${results.map((t) =>
         `<a class="item" href="#/rate/${encodeURIComponent(t.id)}" data-act="chooseTitle" data-id="${esc(t.id)}">
-          <span class="row">${poster(t.poster_path, 'sm')}<span><strong>${esc(t.name)}</strong><br><span class="muted">${kind(t)}</span></span></span><span class="muted">›</span></a>`).join('')}</div>`
+          <span class="row">${poster(t.poster_path, 'sm')}<span><strong>${esc(t.name)}</strong><br><span class="muted">${kind(t)}</span><span class="who-rated" data-id="${esc(t.id)}"></span></span></span><span class="muted">›</span></a>`).join('')}</div>`
         : '<p class="muted">No matches. Try another spelling.</p>';
+      fillWhoRated(results.map((t) => t.id)); // results show right away; names fill in a moment later
     }, 300);
   };
+}
+// "Brian loved it · Maggie liked it · +2 more" under each search result. You first, then newest.
+async function fillWhoRated(ids) {
+  if (!ids.length) return;
+  const { data } = await sb.from('ratings').select('user_id, title_id, rating').in('title_id', ids).order('activity_at', { ascending: false });
+  const verb = { loved: 'loved it', liked: 'liked it', didnt_like: 'didn’t like it', gave_up: 'gave up' };
+  for (const el of document.querySelectorAll('.who-rated')) {
+    const rs = (data ?? []).filter((r) => r.title_id === el.dataset.id).sort((a, b) => isMe(b.user_id) - isMe(a.user_id));
+    if (!rs.length) continue;
+    const named = rs.slice(0, 2).map((r) => `${esc(nameOf(r.user_id))} ${verb[r.rating]}`);
+    el.innerHTML = `<br>${named.join(' · ')}${rs.length > 2 ? ` · +${rs.length - 2} more` : ''}`;
+  }
 }
 actions.chooseTitle = async (d) => {
   const t = await ensureTitle(d.id);
