@@ -58,8 +58,7 @@ function tally(reviews) {
 }
 // Square avatar: their photo if they have one, otherwise initials on a color picked from their id.
 const AV_COLORS = [['#E4EEF9', '#1F4E8C'], ['#E1F5EE', '#085041'], ['#FAECE7', '#712B13'], ['#EEEDFE', '#3C3489'], ['#FAEEDA', '#633806'], ['#FBEAF0', '#72243E']];
-function avatar(id) {
-  const p = state.people.get(id);
+function avatar(id, p = state.people.get(id)) {
   if (p?.avatar_url) return `<img class="avatar" src="${esc(p.avatar_url)}" alt="">`;
   const words = (p?.name || '?').trim().split(/\s+/);
   const ini = (words[0][0] + (words.length > 1 ? words[words.length - 1][0] : '')).toUpperCase();
@@ -233,6 +232,8 @@ async function route() {
     if (location.hash.startsWith('#/help')) return viewHelp();
     if (location.hash.startsWith('#/request')) return viewRequest();
     if (location.hash.startsWith('#/feedback')) return viewFeedback(location.hash.split('/')[2]); // Wiki Walk sends people here, signed in or not
+    // Opened an invite link: explain TV Rex first. Join and Sign in both go to #/signin.
+    if (localStorage.getItem('tv_invite') && !location.hash.startsWith('#/signin')) return viewInvite();
     return viewSignIn();
   }
   if (!state.me) await loadPeople();
@@ -317,6 +318,7 @@ function viewSignIn(step = 'email', email = '') {
     const offerFace = canPasskey() && !localStorage.getItem('tv_invite');
     $app.innerHTML = `
       ${BRAND}
+      ${localStorage.getItem('tv_invite') ? '<a class="back-link" href="#/">← Back</a>' : ''}
       ${offerFace ? `<button class="primary big face" data-act="passkeySignIn">${FACE_ICON} Sign in with ${bioName()}</button>
       <p class="muted small" id="passkeyMsg" role="status"></p>
       <div class="or"><span>or get a code by email</span></div>` : ''}
@@ -415,6 +417,60 @@ function viewHelp() {
     ${helpFor(state.session ? 'in' : 'out').map(([group, qs], gi) => `<h2 class="help-group">${group}</h2>
       <div class="list faq">${qs.map(([q, a], qi) => `<details${!state.session && gi === 0 && qi === 0 ? ' open' : ''}><summary>${q}</summary><p>${a}</p></details>`).join('')}</div>`).join('')}
     ${HELP_EMAIL ? `<p class="muted">Still stuck? Email <a href="mailto:${HELP_EMAIL}">${HELP_EMAIL}</a>.</p>` : ''}`;
+}
+
+// ---------------------------------------------------------------- invite landing
+// What someone sees when they open an invite link, before signing in (designed Nov 16).
+// Who invited them comes from invite_preview (migration 015). Before that migration, or offline,
+// the page still works, just without the inviter's name.
+async function viewInvite() {
+  const code = localStorage.getItem('tv_invite');
+  const { data } = await sb.rpc('invite_preview', { invite_code: code });
+  if (state.session || !localStorage.getItem('tv_invite')) return route(); // signed in meanwhile
+  const inv = data ?? {};
+  const name = inv.name;
+  const dead = { used: 'This invite link has already been used. Each link works for one person.',
+    expired: 'This invite link has expired. Links work for 7 days.',
+    invalid: 'This invite link doesn’t work.' }[inv.status];
+  const icon = (paths) => `<span class="why-icon" aria-hidden="true"><svg viewBox="0 0 24 24" width="26" height="26" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">${paths}</svg></span>`;
+  const why = (svg, title, text) => `<div class="why">${icon(svg)}<div><h3>${title}</h3><p class="muted">${text}</p></div></div>`;
+  $app.innerHTML = `
+    <header class="hero">
+      <img class="hero-logo" src="icon.png?v=5" alt="TV Rex">
+      <h1>What should we watch tonight?</h1>
+      <p>TV Rex answers with picks from your own friends and family: what they loved, what they liked, and what they gave up on.</p>
+    </header>
+    ${dead ? `<div class="card invite-card">
+        <h2>${dead}</h2>
+        <p class="muted">Ask ${name ? esc(name) : 'the person who invited you'} for a new link, or request one.</p>
+        <a class="btn primary big" href="#/request">Request an invite</a>
+      </div>` : `<div class="card invite-card">
+        <div class="inviter">${name ? avatar(inv.inviter_id, inv) : ''}<h2>${name ? `${esc(name)} invited you to TV Rex` : 'You’re invited to TV Rex'}</h2></div>
+        <a class="btn primary big" href="#/signin">Join TV Rex</a>
+      </div>`}
+    <h2>What you get</h2>
+    <div class="card whys">
+      ${why('<circle cx="9" cy="7" r="4"/><path d="M3 21v-2a4 4 0 0 1 4-4h4a4 4 0 0 1 4 4v2"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/><path d="M21 21v-2a4 4 0 0 0-3-3.85"/>',
+        'Picks from people you know', 'Loved it, liked it, or gave up. From friends and family, not critics.')}
+      ${why('<rect x="3" y="7" width="18" height="13" rx="2"/><path d="M16 3l-4 4-4-4"/>',
+        'Where to watch it', 'Every show and movie says which streaming services have it.')}
+      ${why('<path d="M9 6h11"/><path d="M9 12h11"/><path d="M9 18h11"/><path d="M4 6l1 1 2-2"/><path d="M4 12l1 1 2-2"/><path d="M4 18l1 1 2-2"/>',
+        'Your own watch list', 'Save what you want to watch next and keep track of what you’ve seen.')}
+    </div>
+    <h2>A peek inside</h2>
+    <div class="card peek">
+      <div class="poster" aria-hidden="true"></div>
+      <div class="peek-text">
+        <h3>A show your friends watched</h3>
+        <p class="muted">See who watched it, how they rated it, and what they said.</p>
+        <div class="tally"><span class="rtag r-loved">${ratingIcon('loved')}3 Loved</span><span class="rtag r-liked">${ratingIcon('liked')}1 Liked</span><span class="rtag r-gave_up">${ratingIcon('gave_up')}1 Gave up</span></div>
+      </div>
+    </div>
+    ${dead ? '' : `<a class="btn primary big" href="#/signin">Join TV Rex</a>`}
+    <p class="muted center">Free. Nothing to download: it works in Safari on iPhone and iPad.</p>
+    <div class="card privacy">${icon('<rect x="5" y="11" width="14" height="10" rx="2"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/>')}
+      <p>Invite-only, just friends and family. People see your name and reviews. Your email and your list stay private.</p></div>
+    <a class="help-link" href="#/signin">Already joined? Sign in</a>`;
 }
 
 // ---------------------------------------------------------------- not a member
