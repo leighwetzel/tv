@@ -152,17 +152,20 @@ const nameOf = (id) => isMe(id) ? 'You' : (state.people.get(id)?.name || 'Someon
 
 // Other people's rows carry only their name and photo; your own settings come from my_settings().
 async function loadPeople() {
-  const { data } = await sb.from('profiles').select('id, name, avatar_url, is_host, onboarded');
+  // All three requests at once: one wait instead of three in a row.
+  const [{ data }, { data: mine, error }, { data: fl, error: fe }] = await Promise.all([
+    sb.from('profiles').select('id, name, avatar_url, is_host, onboarded'),
+    sb.rpc('my_settings'),
+    sb.from('follows').select('followee'),
+  ]);
   state.people = new Map((data ?? []).map((p) => [p.id, p]));
   state.me = state.people.get(state.session.user.id) ?? null;
   if (!state.me) return;
-  const { data: mine, error } = await sb.rpc('my_settings');
   if (!error && mine?.[0]) Object.assign(state.me, mine[0]);
   else { // database not updated yet: older rules, read your own row directly
     const { data: row } = await sb.from('profiles').select('services, weekly_email').eq('id', state.me.id).single();
     Object.assign(state.me, row ?? {}, { is_member: true });
   }
-  const { data: fl, error: fe } = await sb.from('follows').select('followee');
   state.followsReady = !fe;
   state.following = new Set((fl ?? []).map((f) => f.followee));
 }
@@ -1152,12 +1155,19 @@ function shelf(rows, seeAll) {
 
 // Profile: a summary (counts plus poster rows). The full list is one tap away, a page at a time.
 async function viewFriend(id, filter) {
-  await loadPeople();
+  // People were loaded when the app opened; refresh them in the background, and wait only for someone new.
+  const people = loadPeople().catch((e) => console.error(e));
+  const ratings = sb.from('ratings').select('user_id, title_id, rating, note, season, activity_at, titles(*)').eq('user_id', id).order('activity_at', { ascending: false });
+  const mineToo = filter ? Promise.all([
+    sb.from('watchlist').select('title_id').is('watched_at', null),
+    sb.from('ratings').select('title_id, rating, season').eq('user_id', state.me.id),
+  ]) : null;
+  if (!state.people.has(id)) await people;
   const p = state.people.get(id);
   if (!p) { $app.innerHTML = '<p class="empty">Not found.</p>'; return; }
-  const { data: rs } = await sb.from('ratings').select('user_id, title_id, rating, note, season, activity_at, titles(*)').eq('user_id', id).order('activity_at', { ascending: false });
+  const { data: rs } = await ratings;
   if (!filter) return friendSummary(id, p, rs ?? []);
-  return friendList(id, p, rs ?? [], filter);
+  return friendList(id, p, rs ?? [], filter, PAGE, mineToo);
 }
 
 function friendSummary(id, p, rs) {
@@ -1178,11 +1188,11 @@ function friendSummary(id, p, rs) {
 }
 
 const PAGE = 20;
-async function friendList(id, p, all, filter, limit = PAGE) {
-  const [{ data: wl }, { data: myR }] = await Promise.all([
+async function friendList(id, p, all, filter, limit = PAGE, mineToo = null) {
+  const [{ data: wl }, { data: myR }] = await (mineToo ?? Promise.all([
     sb.from('watchlist').select('title_id').is('watched_at', null),
     sb.from('ratings').select('title_id, rating, season').eq('user_id', state.me.id),
-  ]);
+  ]));
   const saved = new Set((wl ?? []).map((w) => w.title_id));
   const myRating = new Map((myR ?? []).map((r) => [r.title_id, r]));
   const match = (r) => filter === 'all' || (filter === 'mixed' ? !POSITIVE.includes(r.rating) : r.rating === filter);
