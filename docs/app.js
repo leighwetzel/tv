@@ -1437,9 +1437,10 @@ async function viewInvites() {
     <div><h1>My invites</h1><span class="muted">Expired links drop off this list on their own.</span></div>
     ${pending.length || joined.length ? '' : '<p class="empty">No invites yet. Tap Invite someone on Me.</p>'}
     ${pending.length ? `<h2>Pending</h2><div class="list">${pending.map((i) => `<div class="spread"><span><strong>${forLine(i)}</strong><br><span class="muted">Made ${when(i.created_at)} · ${expiresIn(i.expires_at)}</span></span>${removeBtn(i, true)}</div>`).join('')}</div>` : ''}
-    ${joined.length ? `<h2>Joined</h2><div class="list">${joined.map((i) => state.people.has(i.used_by)
+    ${joined.length ? `<h2>Joined</h2><div class="list">${joined.map((i) => state.people.get(i.used_by)?.name
       ? `<a class="item" href="#/friend/${encodeURIComponent(i.used_by)}"><span class="row" style="flex-wrap:nowrap">${avatar(i.used_by)}<span>${esc(nameOf(i.used_by))}<br><span class="muted">Joined ${when(i.used_at)}</span></span></span><span class="muted">›</span></a>`
-      : `<div><strong>${i.for_name ? esc(i.for_name) : 'Someone'}</strong><br><span class="muted">Joined ${when(i.used_at)}</span></div>`).join('')}</div>` : ''}`;
+      : `<div><strong>${i.for_name ? esc(i.for_name) : 'Someone'}</strong><br><span class="muted">Joined ${when(i.used_at)}${state.people.has(i.used_by) ? ' · hasn’t finished signing up' : ''}</span></div>`).join('')}</div>` : ''}`;
+  // A new account has a blank name until Welcome is finished (migration 004), so fall back to the invite's "who's it for" name.
 }
 
 // ---------------------------------------------------------------- friend profile
