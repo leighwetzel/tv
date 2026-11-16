@@ -57,7 +57,7 @@ function tally(reviews) {
   return parts.length ? `<div class="tally">${parts.join('')}</div>` : '';
 }
 // Square avatar: their photo if they have one, otherwise initials on a color picked from their id.
-const AV_COLORS = [['#E8EBF1', '#2C3A57'], ['#E1F5EE', '#085041'], ['#FAECE7', '#712B13'], ['#EEEDFE', '#3C3489'], ['#FAEEDA', '#633806'], ['#FBEAF0', '#72243E']];
+const AV_COLORS = [['#E4EEF9', '#1F4E8C'], ['#E1F5EE', '#085041'], ['#FAECE7', '#712B13'], ['#EEEDFE', '#3C3489'], ['#FAEEDA', '#633806'], ['#FBEAF0', '#72243E']];
 function avatar(id) {
   const p = state.people.get(id);
   if (p?.avatar_url) return `<img class="avatar" src="${esc(p.avatar_url)}" alt="">`;
