@@ -1,8 +1,8 @@
 /* Shared xoleigh look (same as Wiki Walk): iPhone system font, playful blue on soft white, rounded corners.
    Base size is --base; everything else scales from it. */
 :root {
-  /* Fixed 17px: does not follow the iPhone's Text Size setting (Leigh's call, Nov 16). */
-  --base: 17px;
+  /* Fixed 18px: does not follow the iPhone's Text Size setting (Leigh's call, Nov 16). */
+  --base: 18px;
   --bg: #F1F4F8; --card: #FFFFFF; --line: #DCE2E8; --soft: #E9EDF1; --mid: #8C97A4;
   --ink: #2B2B2B; --muted: #626970; --accent: #2864B4; --accent-tint: #E4EEF9; --accent-ink: #FFFFFF; --danger: #A3261C;
   --font: -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
