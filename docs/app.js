@@ -1595,3 +1595,33 @@ async function signedIn() {
   history.replaceState(null, '', location.pathname + (offer ? '#/passkey' : '#/feed'));
   route();
 }
+
+// ---------------------------------------------------------------- pull to refresh
+// From the Home Screen, iOS gives web apps no pull-to-refresh (Safari tabs have their own), so add one:
+// pull down from the top of any page past the line and let go to reload.
+if (navigator.standalone || matchMedia('(display-mode: standalone)').matches) {
+  const ptr = document.createElement('div');
+  ptr.className = 'ptr'; ptr.setAttribute('aria-hidden', 'true');
+  ptr.innerHTML = '<svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14M6 13l6 6 6-6"/></svg>';
+  document.body.append(ptr);
+  const PULL = 80;
+  let startY = null, dy = 0;
+  addEventListener('touchstart', (e) => {
+    startY = window.scrollY <= 0 && e.touches.length === 1 && !document.body.classList.contains('sheet-open') ? e.touches[0].clientY : null;
+    dy = 0;
+  }, { passive: true });
+  addEventListener('touchmove', (e) => {
+    if (startY === null) return;
+    dy = Math.max(0, e.touches[0].clientY - startY);
+    if (window.scrollY > 0) { startY = null; dy = 0; }
+    const d = Math.min(dy, PULL * 1.5);
+    ptr.style.transform = `translate(-50%, ${d * 0.8 - 56}px) rotate(${dy >= PULL ? 180 : 0}deg)`;
+    ptr.classList.toggle('ready', dy >= PULL);
+  }, { passive: true });
+  addEventListener('touchend', () => {
+    if (startY !== null && dy >= PULL) { ptr.classList.add('loading'); ptr.style.transform = 'translate(-50%, 24px)'; location.reload(); return; }
+    startY = null; dy = 0;
+    ptr.classList.remove('ready');
+    ptr.style.transform = '';
+  });
+}

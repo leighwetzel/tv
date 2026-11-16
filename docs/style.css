@@ -244,3 +244,11 @@ nav a .dot { position: absolute; top: 6px; left: calc(50% + 9px); width: 12px; h
 .privacy p { font-size: calc(var(--base) - 1px); line-height: 1.35; }
 .center { text-align: center; }
 .back-link { align-self: flex-start; min-height: 44px; display: inline-flex; align-items: center; text-decoration: none; }
+
+/* Pull to refresh (Home Screen app only) */
+.ptr { position: fixed; z-index: 50; left: 50%; top: env(safe-area-inset-top); width: 40px; height: 40px; border-radius: 50%;
+  background: var(--card); color: var(--muted); border: 1px solid var(--line); box-shadow: 0 2px 8px rgba(0,0,0,.12);
+  display: flex; align-items: center; justify-content: center; transform: translate(-50%, -56px); transition: transform .15s, color .15s; pointer-events: none; }
+.ptr.ready, .ptr.loading { color: var(--accent); }
+.ptr.loading svg { animation: ptr-spin .8s linear infinite; }
+@keyframes ptr-spin { to { transform: rotate(360deg); } }
