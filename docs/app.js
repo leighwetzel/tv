@@ -437,8 +437,8 @@ async function viewInvite() {
   $app.innerHTML = `
     <header class="hero">
       <img class="hero-logo" src="icon.png?v=5" alt="TV Rex">
-      <h1>What should we watch tonight?</h1>
-      <p>TV Rex answers with picks from your own friends and family: what they loved, what they liked, and what they gave up on.</p>
+      <h1>TV Rex</h1>
+      <p>TV recommendations by your friends and family</p>
     </header>
     ${dead ? `<div class="card invite-card">
         <h2>${dead}</h2>
