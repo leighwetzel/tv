@@ -438,14 +438,14 @@ async function viewInvite() {
     <header class="hero">
       <img class="hero-logo" src="icon.png?v=5" alt="TV Rex">
       <h1>TV Rex</h1>
-      <p>TV and movie recommendations by your friends and family</p>
+      <p>TV and movie recommendations<br>by your friends and family</p>
     </header>
     ${dead ? `<div class="card invite-card">
         <h2>${dead}</h2>
         <p class="muted">Ask ${name ? esc(name) : 'the person who invited you'} for a new link, or request one.</p>
         <a class="btn primary big" href="#/request">Request an invite</a>
       </div>` : `<div class="card invite-card">
-        <div class="inviter">${name ? avatar(inv.inviter_id, inv) : ''}<h2>${name ? `${esc(name)} invited you to TV Rex` : 'You’re invited to TV Rex'}</h2></div>
+        <div class="inviter">${name ? avatar(inv.inviter_id, inv) : ''}<h2>${name ? `${esc(name)} invited you` : 'You’re invited to TV Rex'}</h2></div>
         <a class="btn primary big" href="#/signin">Join TV Rex</a>
       </div>`}
     <h2>What you get</h2>
