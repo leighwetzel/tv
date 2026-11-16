@@ -249,10 +249,9 @@ async function route() {
 window.addEventListener('hashchange', route);
 
 async function updateActivityDot() {
-  const [{ count }, { count: reqs }] = await Promise.all([
-    sb.from('activity').select('id', { count: 'exact', head: true }).is('read_at', null),
-    sb.from('invite_requests').select('id', { count: 'exact', head: true }).is('handled', null), // 0 unless you get requests
-  ]);
+  // Activity section was removed from Me (Nov 16), so only new invite requests light the dot.
+  const { count: reqs } = await sb.from('invite_requests').select('id', { count: 'exact', head: true }).is('handled', null); // 0 unless you get requests
+  const count = 0;
   const me = $nav.querySelector('[data-tab=me]');
   me.querySelector('.dot')?.remove();
   if (count || reqs) me.insertAdjacentHTML('beforeend', '<span class="dot" aria-label="new activity"></span>');
@@ -982,8 +981,7 @@ actions.watched = async (d) => {
 async function viewMe() {
   await loadPeople();
   if (!state.services) state.services = (await fn('services')).services;
-  const [{ data: acts }, { count: nRatings }, { data: myRecent }, { error: invitesClosed }, { data: keys, error: keysErr }, { data: reqs, error: reqsErr }, { data: inbox }] = await Promise.all([
-    sb.from('activity').select('*, titles(name)').order('created_at', { ascending: false }).limit(20),
+  const [{ count: nRatings }, { data: myRecent }, { error: invitesClosed }, { data: keys, error: keysErr }, { data: reqs, error: reqsErr }, { data: inbox }] = await Promise.all([
     sb.from('ratings').select('title_id', { count: 'exact', head: true }).eq('user_id', state.me.id),
     sb.from('ratings').select('rating, title_id, titles(id, name, media_type, poster_path)').eq('user_id', state.me.id).order('activity_at', { ascending: false }).limit(SHELF_MAX + 1),
     sb.rpc('my_open_invites'), // missing until migration 006: then only hosts invite
@@ -996,7 +994,6 @@ async function viewMe() {
   if (reqsErr) console.error('invite_requests', reqsErr);
   const faceOn = !keysErr && Array.isArray(keys) && keys.length > 0;
   const canInvite = invitesClosed ? state.me.is_host : true;
-  const actText = { loved_your_pick: 'loved your pick', liked_your_pick: 'liked your pick', thanks: 'said thanks for', joined: 'joined from your invite' };
   $app.innerHTML = `
     <div class="me-head">${avatar(state.me.id).replace('class="avatar"', 'class="avatar lg" id="myAvatar"')}
       <div><h1>${esc(state.me.name)}</h1><span class="muted">${nRatings ?? 0} rating${nRatings === 1 ? '' : 's'}</span>
@@ -1017,10 +1014,6 @@ async function viewMe() {
         <span class="muted small">${esc(r.email)} · ${when(r.created_at)}</span>
         <div class="row"><button class="primary" data-act="inviteRequest" data-id="${r.id}" data-email="${esc(r.email)}" data-name="${esc(r.name)}">Email invite</button>
           <button data-act="skipRequest" data-id="${r.id}">Not now</button></div></div>`).join('')}</div></section>` : ''}
-    <h2>Activity</h2>
-    ${acts?.length ? `<div class="list">${acts.map((a) => `<div class="${a.read_at ? '' : 'unread'}">
-      ${personLink(a.actor_id)} ${actText[a.kind]} ${a.titles ? `<a href="#/title/${encodeURIComponent(a.title_id)}">${esc(a.titles.name)}</a>` : ''} <span class="muted">· ${when(a.created_at)}</span></div>`).join('')}</div>`
-      : '<p class="muted">Nothing yet. When people save or thank your picks, it shows here.</p>'}
     <h2>My services</h2>
     <p class="muted">Used for the My services filter and highlights.</p>
     <div class="row" id="svc">${serviceChips('toggleMySvc')}</div>
@@ -1040,7 +1033,6 @@ async function viewMe() {
       <button class="link" data-act="signOut">Sign out</button>
       <button class="link danger" data-act="deleteAccount">Delete my account</button>
     </div>`;
-  await sb.from('activity').update({ read_at: new Date().toISOString() }).is('read_at', null);
 }
 actions.toggleMySvc = async (d, el) => {
   actions.toggleSvc(d, el);
