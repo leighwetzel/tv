@@ -78,7 +78,8 @@ const BRAND = `<header class="brand">
   <img class="logo" src="icon.png?v=5" alt="">
   <div><h1>TV Rex</h1><p class="tagline">Picks from friends and family</p></div></header>`;
 const personLink = (id) => `<a class="person" href="#/friend/${encodeURIComponent(id)}">${esc(nameOf(id))}</a>`;
-const SAVED = '<span class="btn saved">✓ Saved</span>'; // shown in place of + Want to watch once a title is on your list
+const SAVED = '<span class="btn saved">✓ Saved</span>';
+const WATCHING = '<span class="btn saved">✓ Watching</span>'; // shown in place of + Want to watch once a title is on your list
 const titleLink = (t) => `#/title/${encodeURIComponent(t.id)}`;
 
 function when(ts) {
@@ -664,9 +665,13 @@ async function viewTitle(id) {
   const [{ data: t }, { data: rs }, { data: wl }] = await Promise.all([
     sb.from('titles').select('*').eq('id', id).single(),
     sb.from('ratings').select('user_id, title_id, rating, note, season, activity_at').eq('title_id', id).order('activity_at', { ascending: false }),
-    sb.from('watchlist').select('title_id, watched_at').eq('title_id', id).maybeSingle(),
+    sb.from('watchlist').select('*').eq('title_id', id).maybeSingle(),
   ]);
   if (!t) { $app.innerHTML = '<p class="empty">Title not found.</p>'; return; }
+  const onList = wl && !wl.watched_at;
+  const listButtons = onList && wl.started_at ? WATCHING
+    : `<div class="row">${onList ? SAVED : `<button class="primary" data-act="save" data-id="${esc(id)}">+ Want to watch</button>`}
+       ${'started_at' in (wl ?? { started_at: null }) ? `<button data-act="watchNow" data-id="${esc(id)}">Watching</button>` : ''}</div>`;
   await loadProviders([id]);
   const p = state.providers.get(id) ?? {};
   const mine = (rs ?? []).find((r) => isMe(r.user_id));
@@ -675,7 +680,7 @@ async function viewTitle(id) {
     <a href="javascript:history.back()">← Back</a>
     <div class="pick">${poster(t.poster_path, 'lg')}
       <div class="pick-body"><h1>${esc(t.name)}</h1><span class="muted">${kind(t)}</span>
-        ${mine ? '' : wl && !wl.watched_at ? SAVED : `<button class="primary" data-act="save" data-id="${esc(id)}">+ Want to watch</button>`}
+        ${mine ? '' : listButtons}
       </div></div>
     <section class="card watchbox">
       <div class="muted small">WATCH ON</div>
@@ -700,7 +705,7 @@ async function viewTitle(id) {
     ${others.length ? `<div class="list">${others.map((r) => reviewHtml(r)).join('')}</div>` : '<p class="muted">No one else has rated this yet.</p>'}`;
 }
 
-function ratingForm(mine, titleId, saveLabel = 'Save') {
+function ratingForm(mine, titleId, saveLabel = 'Save review') {
   return `<form class="field" data-title="${esc(titleId)}" id="rate">
     <div class="ratings">${Object.entries(RATING).map(([k, v]) =>
       `<button type="button" class="${mine?.rating === k ? 'on' : ''}" data-act="pickRating" data-val="${k}" aria-pressed="${mine?.rating === k}">${ratingIcon(k)}${v}</button>`).join('')}</div>
@@ -750,6 +755,18 @@ actions.saveRating = async (d, el) => {
 
 let searchTimer;
 const searchCache = new Map();
+// Straight to Watching: on My list and already started.
+actions.watchNow = async (d, el) => {
+  el.disabled = true;
+  if (!(await ensureTitle(d.id))) { el.disabled = false; return toast('Couldn’t load that title. Try again.'); }
+  const { data: rs } = await sb.from('ratings').select('user_id, rating').eq('title_id', d.id);
+  const recs = (rs ?? []).filter((r) => !isMe(r.user_id) && POSITIVE.includes(r.rating)).map((r) => r.user_id);
+  const { error } = await sb.from('watchlist').upsert({ user_id: state.me.id, title_id: d.id, watched_at: null, started_at: new Date().toISOString() });
+  if (error) { el.disabled = false; throw error; }
+  if (recs.length) await sb.from('watchlist_credits').upsert(recs.map((rid) => ({ user_id: state.me.id, title_id: d.id, recommender_id: rid })), { ignoreDuplicates: true });
+  toast('Added to Watching');
+  location.hash = '#/list';
+};
 async function ensureTitle(id) {
   const { data } = await sb.from('titles').select('*').eq('id', id).maybeSingle();
   if (data) return data;
@@ -788,9 +805,11 @@ actions.chooseTitle = async (d) => {
   $app.innerHTML = `
     <button class="link" data-act="backToAdd">← Search again</button>
     <div class="pick">${poster(t.poster_path, 'lg')}<div class="pick-body"><h1>${esc(t.name)}</h1><span class="muted">${kind(t)}</span>${watchOn(t.id)}</div></div>
+    ${mine ? '' : `<div class="row actions"><button data-act="watchNow" data-id="${esc(d.id)}">Watching</button>
+      <button data-act="save" data-id="${esc(d.id)}">+ Want to watch</button></div>`}
     <h2>How was it?</h2>
     ${mine ? '<p class="muted">You’ve rated this already. Change it below.</p>' : ''}
-    ${ratingForm(mine, d.id, mine ? 'Save changes' : 'Save').replace('<form ', `<form data-after="#/title/${encodeURIComponent(d.id)}" `)}`;
+    ${ratingForm(mine, d.id, mine ? 'Save changes' : 'Save review').replace('<form ', `<form data-after="#/title/${encodeURIComponent(d.id)}" `)}`;
 };
 actions.backToAdd = () => viewAdd();
 
@@ -920,14 +939,14 @@ async function viewList() {
     ${filterBar('list')}
     ${canStart ? `${head('Watching', watching.length)}
     ${watching.length ? watching.map((r) => card(r,
-      `<button class="primary" data-act="watched" data-id="${esc(r.title_id)}">Finished it</button>
+      `<button class="primary" data-act="watched" data-id="${esc(r.title_id)}">Write review</button>
        <button data-act="stopWatching" data-id="${esc(r.title_id)}">Not watching</button>`,
       `${kind(r.titles)} · started ${when(r.started_at)}`)).join('')
-      : `<p class="muted">${filtered ? 'Nothing here with these filters.' : 'Tap <b>Start watching</b> on anything below.'}</p>`}` : ''}
+      : `<p class="muted">${filtered ? 'Nothing here with these filters.' : 'Tap <b>Watching</b> on anything below.'}</p>`}` : ''}
     ${head('Want to watch', want.length)}
     ${want.length ? want.map((r) => card(r,
-      `${canStart ? `<button class="primary" data-act="startWatching" data-id="${esc(r.title_id)}">Start watching</button>` : ''}
-       <button data-act="watched" data-id="${esc(r.title_id)}">Watched</button>`,
+      `${canStart ? `<button class="primary" data-act="startWatching" data-id="${esc(r.title_id)}">Watching</button>` : ''}
+       <button data-act="watched" data-id="${esc(r.title_id)}">Write review</button>`,
       from(r))).join('')
       : `<p class="muted">${filtered ? 'Nothing here with these filters. Try “All”.' : 'Nothing saved yet. Tap “+ Want to watch” on a friend’s pick.'}</p>`}
     ${head('Watched', nWatched ?? 0, (nWatched ?? 0) > LIST_WATCHED_MAX ? `<a class="small" href="#/friend/${state.me.id}/all">See all</a>` : '')}

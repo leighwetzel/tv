@@ -163,8 +163,31 @@ Deno.serve(async (req) => {
       case 'search': {
         const q = String(body.q ?? '').trim();
         if (q.length < 2) return json({ results: [] });
-        const data = await tmdb('/search/multi', { query: q, include_adult: 'false', region: REGION });
-        const results = data.results.map((r: any) => toTitle(r)).filter(Boolean).slice(0, 12);
+        // A year at the end narrows it down: "us 2020".
+        const m = q.match(/^(.*\S)\s+((?:19|20)\d\d)$/);
+        const query = m ? m[1] : q;
+        const year = m ? Number(m[2]) : null;
+        // Short or common names ("Us") get buried in the mixed search, so also ask for TV and movies on their own.
+        const opts = { query, include_adult: 'false', region: REGION };
+        const [multi, tv, movie] = await Promise.all([
+          tmdb('/search/multi', opts),
+          tmdb('/search/tv', opts).catch(() => ({ results: [] })),
+          tmdb('/search/movie', opts).catch(() => ({ results: [] })),
+        ]);
+        const seen = new Map<string, { t: Title; pop: number }>();
+        const add = (r: any, type?: 'tv' | 'movie') => {
+          const t = toTitle(r, type);
+          if (t && !seen.has(t.id)) seen.set(t.id, { t, pop: Number(r.popularity) || 0 });
+        };
+        multi.results.forEach((r: any) => add(r));
+        tv.results.forEach((r: any) => add(r, 'tv'));
+        movie.results.forEach((r: any) => add(r, 'movie'));
+        const norm = (x: string) => x.toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
+        const exact = (t: Title) => norm(t.name) === norm(query);
+        const results = [...seen.values()]
+          .filter(({ t }) => !year || t.year === year)
+          .sort((a, b) => Number(exact(b.t)) - Number(exact(a.t)) || b.pop - a.pop)
+          .map(({ t }) => t).slice(0, 20);
         await saveTitles(results);
         return json({ results });
       }
