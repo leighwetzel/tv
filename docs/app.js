@@ -1415,6 +1415,23 @@ function expiresIn(ts) {
   const days = Math.ceil((new Date(ts) - Date.now()) / 86400000);
   return days <= 1 ? 'expires within a day' : `expires in ${days}d`;
 }
+// Unused links (pending or expired) can be removed; joined ones stay (migration 016).
+const removeBtn = (i, live) => `<button class="small" data-act="removeInvite" data-code="${esc(i.code)}" data-live="${live ? 1 : ''}" aria-label="Remove ${i.for_name ? 'link for ' + esc(i.for_name) : 'this link'}">Remove</button>`;
+actions.removeInvite = async (d, el) => {
+  if (d.live && !confirm('Remove this link? It will stop working.')) return;
+  el.disabled = true;
+  const { error, count } = await sb.from('invites').delete({ count: 'exact' }).eq('code', d.code).is('used_by', null);
+  if (error || !count) { el.disabled = false; console.error('remove invite', error); return toast('Couldn’t remove that link. Try again.'); }
+  toast('Link removed');
+  viewInvites();
+};
+actions.removeExpired = async (d, el) => {
+  el.disabled = true;
+  const { error } = await sb.from('invites').delete().eq('created_by', state.me.id).is('used_by', null).lte('expires_at', new Date().toISOString());
+  if (error) { el.disabled = false; console.error('remove expired', error); return toast('Couldn’t remove them. Try again.'); }
+  toast('Expired links removed');
+  viewInvites();
+};
 async function viewInvites() {
   await loadPeople();
   const list = await loadMyInvites();
@@ -1425,11 +1442,12 @@ async function viewInvites() {
     <a href="#/me">← Me</a>
     <div><h1>My invites</h1><span class="muted">${list.length} sent${list.length ? ' · ' + inviteCounts(list) : ''}</span></div>
     ${list.length ? '' : '<p class="empty">No invites yet. Tap Invite someone on Me.</p>'}
-    ${section('Pending', of('pending'), (i) => `<div><strong>${forLine(i)}</strong><br><span class="muted">Made ${when(i.created_at)} · ${expiresIn(i.expires_at)}</span></div>`)}
+    ${section('Pending', of('pending'), (i) => `<div class="spread"><span><strong>${forLine(i)}</strong><br><span class="muted">Made ${when(i.created_at)} · ${expiresIn(i.expires_at)}</span></span>${removeBtn(i, true)}</div>`)}
     ${section('Joined', of('joined'), (i) => state.people.has(i.used_by)
       ? `<a class="item" href="#/friend/${encodeURIComponent(i.used_by)}"><span class="row" style="flex-wrap:nowrap">${avatar(i.used_by)}<span>${esc(nameOf(i.used_by))}<br><span class="muted">Joined ${when(i.used_at)}</span></span></span><span class="muted">›</span></a>`
       : `<div><strong>${i.for_name ? esc(i.for_name) : 'Someone'}</strong><br><span class="muted">Joined ${when(i.used_at)}</span></div>`)}
-    ${section('Expired', of('expired'), (i) => `<div><span>${forLine(i)}</span><br><span class="muted">Made ${when(i.created_at)} · not used</span></div>`)}`;
+    ${of('expired').length > 1 ? '<button class="link" data-act="removeExpired" style="align-self:flex-start">Remove all expired links</button>' : ''}
+    ${section('Expired', of('expired'), (i) => `<div class="spread"><span>${forLine(i)}<br><span class="muted">Made ${when(i.created_at)} · not used</span></span>${removeBtn(i, false)}</div>`)}`;
 }
 
 // ---------------------------------------------------------------- friend profile
