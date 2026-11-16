@@ -1272,6 +1272,13 @@ async function insertInvite(forName) {
   if (res.error && /for_name/.test(res.error.message)) { delete row.for_name; res = await sb.from('invites').insert(row).select('code').single(); } // before migration 011
   return res;
 }
+// Only blame the 10-link limit when that's what refused it (a row-level security refusal); hosts have no limit (migration 016).
+function inviteError(error) {
+  console.error('invite', error);
+  return error.code === '42501' && !state.me?.is_host
+    ? 'Couldn’t make a link. You can have up to 10 unused links at a time.'
+    : 'Couldn’t make a link. Check your connection and try again.';
+}
 actions.invite = () => {
   document.getElementById('inviteBox').innerHTML = `<div class="card field">
     <label for="inviteFor">Who’s it for? (optional)</label>
@@ -1284,7 +1291,7 @@ actions.makeInvite = async (d, el) => {
   el.disabled = true;
   const forName = document.getElementById('inviteFor')?.value.trim() || '';
   const { data, error } = await insertInvite(forName);
-  if (error) { el.disabled = false; return toast('Couldn’t make a link. You can have up to 10 unused links at a time.'); }
+  if (error) { el.disabled = false; return toast(inviteError(error)); }
   const url = `${location.origin}${location.pathname}?invite=${data.code}`;
   document.getElementById('inviteBox').innerHTML = `<div class="card field">
     <p><strong>${forName ? `For ${esc(forName)} only.` : 'For one person only.'}</strong> The link works once, for 7 days.</p>
@@ -1296,7 +1303,7 @@ actions.makeInvite = async (d, el) => {
 actions.inviteRequest = async (d, el) => {
   el.disabled = true;
   const { data, error } = await insertInvite(d.name);
-  if (error) { el.disabled = false; return toast('Couldn’t make a link. You can have up to 10 unused links at a time.'); }
+  if (error) { el.disabled = false; return toast(inviteError(error)); }
   const url = `${location.origin}${location.pathname}?invite=${data.code}`;
   await sb.from('invite_requests').update({ handled: 'invited', handled_at: new Date().toISOString() }).eq('id', d.id);
   const first = d.name.split(/\s+/)[0];
