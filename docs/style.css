@@ -11,7 +11,7 @@
 * { box-sizing: border-box; }
 html { font-size: 17px; -webkit-text-size-adjust: 100%; }
 html, body { margin: 0; background: var(--bg); color: var(--ink); }
-body { font: 400 var(--base)/1.45 var(--font); }
+body { font: 400 calc(var(--base) + 1px)/1.45 var(--font); } /* body text one step above the base */
 body { padding-bottom: calc(84px + env(safe-area-inset-bottom)); }
 main { max-width: 600px; margin: 0 auto; padding: calc(16px + env(safe-area-inset-top)) 16px 28px; display: flex; flex-direction: column; gap: 16px; }
 h1 { font-size: calc(var(--base) + 7px); line-height: 1.1; margin: 0; font-weight: 600; }
@@ -90,7 +90,7 @@ a.person { color: var(--ink); font-weight: 600; text-decoration: none; }
 .review .who a.person { font-size: calc(var(--base) - 2px); min-height: 44px; display: inline-flex; align-items: center; }
 .pill { font-size: calc(var(--base) - 3px); font-weight: 600; color: var(--accent); background: var(--accent-tint); padding: 2px 9px; border-radius: 99px; }
 .when { font-size: calc(var(--base) - 4px); color: var(--muted); }
-.note { font-size: calc(var(--base) - 1px); line-height: 1.4; white-space: pre-line; }
+.note { font-size: var(--base); line-height: 1.4; white-space: pre-line; }
 .watch { font-size: calc(var(--base) - 3px); }
 .watch strong { font-weight: 600; }
 .watch.mine strong { color: var(--accent); }
