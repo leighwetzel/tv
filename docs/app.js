@@ -376,7 +376,7 @@ const HELP = [
     ['My invite link says it’s used or expired', 'Each invite link works once, for one person, for 7 days. Ask the person who invited you for a new link.'],
   ]],
   ['Using TV Rex', 'in', [
-    ['How do I add something I watched?', 'Tap <b>Add</b> at the bottom. Type the name, tap the right show or movie, pick a rating, and add a note if you like.'],
+    ['How do I add something I watched?', 'Tap <b>Search</b> at the bottom. Type the name, tap the right show or movie, pick a rating, and add a note if you like.'],
     ['What do the ratings mean?', '<b>Loved</b> and <b>Liked</b> show up in everyone’s feed. <b>Didn’t like</b> and <b>Gave up</b> only show next to other people’s reviews of the same title, so they never start a new card.'],
     ['Where can I watch it?', 'Look for <b>Watch on</b> on each card. Services you’ve picked in <b>Me</b> are highlighted in blue. Streaming info is from JustWatch, for the US.'],
     ['How do I save something for later?', 'Tap <b>+ Want to watch</b>. It goes to <b>My list</b> at the bottom of the screen.'],
@@ -787,8 +787,8 @@ async function ensureTitle(id) {
 }
 async function viewAdd() {
   $app.innerHTML = `
-    <h1>Add a title</h1>
-    <div class="field"><label for="q">Search TV and movies</label>
+    <h1>Search</h1>
+    <div class="field"><label for="q">Find a show or movie</label>
       <input id="q" type="search" autocomplete="off" placeholder="e.g. Slow Horses"></div>
     <div id="results"></div>`;
   const q = document.getElementById('q');
@@ -980,7 +980,7 @@ async function viewList() {
       <div class="pick-body"><a class="title" href="${titleLink(r.titles)}">${esc(r.titles.name)}</a>
         <span class="muted"><strong>${ratingLabel(r)}</strong> · ${when(r.activity_at)}</span>
         ${r.note ? `<div class="note clamp">${esc(r.note)}</div><button class="link small readmore" data-act="readMore" hidden>Read more</button>` : ''}</div></div></div>`).join('')
-      : '<p class="muted">Nothing rated yet. Tap Add to rate a show.</p>'}
+      : '<p class="muted">Nothing rated yet. Tap Search to find and rate a show.</p>'}
     ${(nWatched ?? 0) > LIST_WATCHED_MAX ? `<a class="btn big" href="#/friend/${state.me.id}/all">See all ${nWatched} watched</a>` : ''}`;
 }
 actions.startWatching = async (d) => {
@@ -1051,7 +1051,7 @@ async function viewMe() {
     ${state.followsReady ? `<div class="list"><a class="item" href="#/following"><span><strong>Following</strong> <span class="muted">· ${state.following.size} ${state.following.size === 1 ? 'person' : 'people'}</span></span><span class="muted">›</span></a></div>` : ''}
     <div class="spread shelf-head"><h2>My picks</h2><a class="small" href="#/friend/${state.me.id}">See all</a></div>
     ${myRecent?.length ? shelf(myRecent, `#/friend/${state.me.id}/all`)
-      : '<p class="muted">Nothing rated yet. Tap Add to rate a show.</p>'}
+      : '<p class="muted">Nothing rated yet. Tap Search to find and rate a show.</p>'}
     <div class="list">
       <div class="spread"><span>Weekly email (Sundays)</span><button class="chip ${state.me.weekly_email ? 'on' : ''}" data-act="toggleEmail">${state.me.weekly_email ? 'On' : 'Off'}</button></div>
       <a class="item" href="#/help"><span>Help</span><span class="muted">›</span></a>
