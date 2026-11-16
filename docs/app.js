@@ -438,7 +438,7 @@ async function viewInvite() {
     <header class="hero">
       <img class="hero-logo" src="icon.png?v=5" alt="TV Rex">
       <h1>TV Rex</h1>
-      <p>TV and movie recommendations<br>by your friends and family</p>
+      <p>TV and movie recommendations by your friends and family</p>
     </header>
     ${dead ? `<div class="card invite-card">
         <h2>${dead}</h2>
