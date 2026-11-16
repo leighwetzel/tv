@@ -31,7 +31,7 @@ async function tmdb(path: string, params: Record<string, string | number> = {}) 
   return res.json();
 }
 
-type Title = { id: string; media_type: 'tv' | 'movie'; tmdb_id: number; name: string; year: number | null; poster_path: string | null };
+type Title = { id: string; media_type: 'tv' | 'movie'; tmdb_id: number; name: string; year: number | null; poster_path: string | null; genres: number[] | null };
 
 function toTitle(r: any, type?: 'tv' | 'movie'): Title | null {
   const media_type = type ?? r.media_type;
@@ -44,12 +44,15 @@ function toTitle(r: any, type?: 'tv' | 'movie'): Title | null {
     name: media_type === 'tv' ? r.name : r.title,
     year: date ? Number(String(date).slice(0, 4)) : null,
     poster_path: r.poster_path ?? null,
+    genres: Array.isArray(r.genre_ids) ? r.genre_ids : Array.isArray(r.genres) ? r.genres.map((g: any) => g.id) : null,
   };
 }
 
 async function saveTitles(titles: Title[]) {
   if (!titles.length) return;
-  const { error } = await admin.from('titles').upsert(titles.map((t) => ({ ...t, updated_at: new Date().toISOString() })));
+  const rows = titles.map((t) => ({ ...t, updated_at: new Date().toISOString() }));
+  let { error } = await admin.from('titles').upsert(rows);
+  if (error && /genres/.test(error.message)) ({ error } = await admin.from('titles').upsert(rows.map(({ genres, ...t }) => t))); // before migration 013
   if (error) console.error('saveTitles', error.message);
 }
 
@@ -190,6 +193,20 @@ Deno.serve(async (req) => {
           .map(({ t }) => t).slice(0, 20);
         await saveTitles(results);
         return json({ results });
+      }
+      case 'genres': {
+        // Fill in genres for titles saved before genres were stored (up to 40 per call).
+        const ids = (Array.isArray(body.ids) ? body.ids : []).map(String).filter((id: string) => /^(tv|movie):\d+$/.test(id)).slice(0, 40);
+        const out: Record<string, number[]> = {};
+        await Promise.all(ids.map(async (id: string) => {
+          const [type, num] = id.split(':');
+          try {
+            const d = await tmdb(`/${type}/${num}`);
+            out[id] = (d.genres ?? []).map((g: any) => g.id);
+            await admin.from('titles').update({ genres: out[id] }).eq('id', id);
+          } catch { /* skip; tried again next time */ }
+        }));
+        return json({ genres: out });
       }
       case 'providers':
         return json({ providers: await providersFor((body.ids ?? []).slice(0, 60)) });

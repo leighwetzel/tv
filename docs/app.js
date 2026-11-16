@@ -142,7 +142,7 @@ const state = {
   people: new Map(),      // id -> profile (everyone you can see: all members)
   providers: new Map(),   // title id -> { flatrate, rent, buy }
   services: null,         // streaming service list from TMDB
-  feedType: 'all', feedSvc: 'all', listSvc: 'all', listType: 'all', feedSort: 'review', listSort: 'added', feedPeople: 'all',
+  feedType: 'all', feedGenre: 'all', listGenre: 'all', feedSvc: 'all', listSvc: 'all', listType: 'all', feedSort: 'review', listSort: 'added', feedPeople: 'all',
   following: new Set(),   // ids you follow
   followsReady: false,    // false until the follows table exists (migration 005)
   qp: null,               // quick-pick round in progress
@@ -496,7 +496,7 @@ const feedKey = () => `tv_feed_${state.me?.id}`;
 async function fetchFeed() {
   const [{ data: rows, error }, { data: wl }] = await Promise.all([
     sb.from('ratings')
-      .select('user_id, title_id, rating, note, season, source, activity_at, titles(id, name, year, media_type, poster_path)')
+      .select('user_id, title_id, rating, note, season, source, activity_at, titles(*)')
       .order('activity_at', { ascending: false }).limit(400),
     sb.from('watchlist').select('title_id').is('watched_at', null),
   ]);
@@ -549,6 +549,8 @@ async function renderFeed({ rows, wl }) {
   }
   let list = [...cards.values()].filter((c) => c.started);
   if (state.feedType !== 'all') list = list.filter((c) => c.title.media_type === state.feedType);
+  if (state.feedGenre !== 'all') { await fillGenres(list.map((c) => c.title)); list = list.filter((c) => inGenre(c.title, state.feedGenre)); }
+  else fillGenres(list.slice(0, 40).map((c) => c.title)); // quietly, so the Genre filter is ready later
   await loadProviders(list.map((c) => c.title.id));
   // Only titles you can stream right now (if streaming info didn't load, keep the card).
   list = list.filter((c) => !state.providers.has(c.title.id) || subs(c.title.id).length);
@@ -579,10 +581,34 @@ actions.feedMore = async () => {
 
 // Filters: one "Showing … / Filter" line; the choices slide up in a panel.
 const TYPE = ['Show', [['all', 'All'], ['tv', 'TV'], ['movie', 'Movies']]];
+// Genre filter: TMDB's TV and movie genres folded into a short, plain list.
+const GENRES = [
+  ['comedy', 'Comedy', [35]],
+  ['drama', 'Drama', [18]],
+  ['crime', 'Crime & mystery', [80, 9648]],
+  ['thriller', 'Thriller & horror', [53, 27]],
+  ['action', 'Action & adventure', [28, 12, 10759, 37, 10752, 10768]],
+  ['scifi', 'Sci-fi & fantasy', [878, 14, 10765]],
+  ['romance', 'Romance', [10749]],
+  ['docs', 'Documentary & history', [99, 36]],
+  ['family', 'Family & animation', [10751, 16, 10762]],
+  ['reality', 'Reality & talk', [10764, 10767, 10402]],
+];
+const GENRE_OPTS = [['all', 'Any genre'], ...GENRES.map(([k, l]) => [k, l])];
+const inGenre = (t, key) => key === 'all' || (t?.genres ?? []).some((g) => GENRES.find(([k]) => k === key)[2].includes(g));
+// Titles saved before genres were stored get them filled in, a batch at a time.
+async function fillGenres(titles) {
+  const missing = [...new Map(titles.filter((t) => t && t.genres == null).map((t) => [t.id, t])).values()].slice(0, 40);
+  if (!missing.length) return;
+  try {
+    const { genres } = await fn('genres', { ids: missing.map((t) => t.id) });
+    for (const t of titles) if (t && t.genres == null && genres[t.id]) t.genres = genres[t.id];
+  } catch (e) { console.error('genres', e); }
+}
 const FILTERS = {
-  feed: [['feedType', ...TYPE], ['feedSvc', 'Services', [['all', 'All services'], ['mine', 'My services']]],
+  feed: [['feedType', ...TYPE], ['feedGenre', 'Genre', GENRE_OPTS], ['feedSvc', 'Services', [['all', 'All services'], ['mine', 'My services']]],
     ['feedSort', 'Sort by', [['review', 'Latest reviews'], ['release', 'Newest releases']]]],
-  list: [['listSvc', 'Services', [['all', 'All services'], ['mine', 'On my services']]], ['listType', ...TYPE],
+  list: [['listSvc', 'Services', [['all', 'All services'], ['mine', 'On my services']]], ['listType', ...TYPE], ['listGenre', 'Genre', GENRE_OPTS],
     ['listSort', 'Sort by', [['added', 'Recently saved'], ['release', 'Newest releases']]]],
 };
 const FILTER_ICON = '<svg aria-hidden="true" viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M4 7h16M7 12h10M10 17h4"/></svg>';
@@ -595,8 +621,8 @@ function filterBar(name) {
     <div class="sheet-backdrop" data-act="closeFilters"></div>
     <div class="sheet" role="dialog" aria-modal="true" aria-labelledby="sheetTitle" tabindex="-1">
       <h2 id="sheetTitle">Filter and sort</h2>
-      ${groups.map(([key, label, opts]) => `<div class="field"><label>${label}</label><div class="seg" role="group" aria-label="${label}">
-        ${opts.map(([v, l]) => `<button class="${state[key] === v ? 'on' : ''}" data-act="pickFilter" data-key="${key}" data-val="${v}" aria-pressed="${state[key] === v}">${l}</button>`).join('')}</div></div>`).join('')}
+      ${groups.map(([key, label, opts]) => `<div class="field"><label>${label}</label><div class="${opts.length > 4 ? 'row chips' : 'seg'}" role="group" aria-label="${label}">
+        ${opts.map(([v, l]) => `<button class="${opts.length > 4 ? 'chip ' : ''}${state[key] === v ? 'on' : ''}" data-act="pickFilter" data-key="${key}" data-val="${v}" aria-pressed="${state[key] === v}">${l}</button>`).join('')}</div></div>`).join('')}
       <button class="primary big" data-act="closeFilters">Done</button>
     </div>`;
 }
@@ -782,7 +808,8 @@ async function ensureTitle(id) {
   if (data) return data;
   const t = searchCache.get(id);
   if (!t) return null;
-  await sb.from('titles').insert(t);
+  const { error } = await sb.from('titles').insert(t);
+  if (error && /genres/.test(error.message)) { const { genres, ...rest } = t; await sb.from('titles').insert(rest); } // before migration 013
   return t;
 }
 async function viewAdd() {
@@ -944,6 +971,7 @@ async function viewList() {
   let items = rows ?? [];
   await loadProviders([...items.map((r) => r.title_id), ...(watched ?? []).map((r) => r.title_id)]);
   if (state.listType !== 'all') items = items.filter((r) => r.titles.media_type === state.listType);
+  if (state.listGenre !== 'all') { await fillGenres(items.map((r) => r.titles)); items = items.filter((r) => inGenre(r.titles, state.listGenre)); }
   if (state.listSvc === 'mine') items = items.filter((r) => onMyServices(r.title_id));
   if (state.listSort === 'release') items.sort((a, b) => (b.titles.year ?? 0) - (a.titles.year ?? 0));
   const watching = items.filter((r) => r.started_at).sort((a, b) => new Date(b.started_at) - new Date(a.started_at));
