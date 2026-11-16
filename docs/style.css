@@ -11,7 +11,7 @@
 * { box-sizing: border-box; }
 html { font-size: 17px; -webkit-text-size-adjust: 100%; }
 html, body { margin: 0; background: var(--bg); color: var(--ink); }
-body { font: 400 calc(var(--base) + 1px)/1.45 var(--font); } /* body text one step above the base */
+body { font: 600 calc(var(--base) + 2px)/1.4 var(--font); } /* body text: 20px semibold, like Instagram captions with Bold Text on */
 body { padding-bottom: calc(84px + env(safe-area-inset-bottom)); }
 main { max-width: 600px; margin: 0 auto; padding: calc(16px + env(safe-area-inset-top)) 16px 28px; display: flex; flex-direction: column; gap: 16px; }
 h1 { font-size: calc(var(--base) + 7px); line-height: 1.1; margin: 0; font-weight: 600; }
@@ -54,7 +54,7 @@ label { font-size: calc(var(--base) - 3px); color: var(--muted); font-weight: 60
 .poster.xl { width: 180px; height: 270px; }
 .poster.sm { width: 56px; height: 84px; }
 .pick-body { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 4px; }
-.title { font-weight: 650; font-size: var(--base); line-height: 1.25; color: var(--ink); text-decoration: none; }
+.title { font-weight: 750; font-size: calc(var(--base) + 4px); line-height: 1.25; color: var(--ink); text-decoration: none; }
 .review { border-top: 1px solid var(--line); padding-top: 10px; margin-top: 10px; display: flex; gap: 10px; align-items: flex-start; }
 .review-body { flex: 1; min-width: 0; }
 .avatar { width: 36px; height: 36px; flex: none; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-weight: 600; font-size: calc(var(--base) - 3px); object-fit: cover; margin-top: 2px; }
@@ -86,11 +86,11 @@ textarea { padding: 12px 14px; line-height: 1.45; resize: vertical; }
 .ratings button { gap: 6px; }
 @media (min-width: 768px) { main, .sheet { max-width: 900px; } }
 .review .who { display: flex; flex-wrap: wrap; align-items: center; column-gap: 8px; row-gap: 0; }
-a.person { color: var(--ink); font-weight: 600; text-decoration: none; }
+a.person { color: var(--ink); font-weight: 750; text-decoration: none; }
 .review .who a.person { font-size: calc(var(--base) - 2px); min-height: 44px; display: inline-flex; align-items: center; }
 .pill { font-size: calc(var(--base) - 3px); font-weight: 600; color: var(--accent); background: var(--accent-tint); padding: 2px 9px; border-radius: 99px; }
 .when { font-size: calc(var(--base) - 4px); color: var(--muted); }
-.note { font-size: var(--base); line-height: 1.4; white-space: pre-line; }
+.note { font-size: calc(var(--base) + 2px); line-height: 1.35; white-space: pre-line; }
 .watch { font-size: calc(var(--base) - 3px); }
 .watch strong { font-weight: 600; }
 .watch.mine strong { color: var(--accent); }
