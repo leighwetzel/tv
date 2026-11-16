@@ -206,6 +206,4 @@ nav a svg { width: 28px; height: 28px; }
 nav a.on { color: var(--accent); background: var(--accent-tint); }
 nav a.on svg { stroke-width: 2.2; }
 nav a:active { background: var(--soft); }
-nav a[data-tab=add] svg circle { fill: var(--accent); stroke: var(--accent); }
-nav a[data-tab=add] svg path { stroke: #fff; stroke-width: 2.4; }
 nav a .dot { position: absolute; top: 6px; left: calc(50% + 9px); width: 12px; height: 12px; border-radius: 6px; background: var(--danger); border: 2px solid #fff; }
