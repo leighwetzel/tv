@@ -11,7 +11,7 @@
 * { box-sizing: border-box; }
 html { font-size: 17px; -webkit-text-size-adjust: 100%; }
 html, body { margin: 0; background: var(--bg); color: var(--ink); }
-body { font: 600 calc(var(--base) + 2px)/1.4 var(--font); } /* body text: 20px semibold, like Instagram captions with Bold Text on */
+body { font: 400 calc(var(--base) + 2px)/1.4 var(--font); } /* body text: 20px regular */
 body { padding-bottom: calc(84px + env(safe-area-inset-bottom)); }
 main { max-width: 600px; margin: 0 auto; padding: calc(16px + env(safe-area-inset-top)) 16px 28px; display: flex; flex-direction: column; gap: 16px; }
 h1 { font-size: calc(var(--base) + 7px); line-height: 1.1; margin: 0; font-weight: 600; }
