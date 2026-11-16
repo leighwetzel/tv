@@ -1407,10 +1407,10 @@ async function loadMyInvites() {
   return data ?? [];
 }
 const inviteState = (i) => i.used_by ? 'joined' : new Date(i.expires_at) > new Date() ? 'pending' : 'expired';
-// Only open links count; joined and expired ones drop off My invites on their own (Nov 16).
+// Expired links drop off on their own (Nov 16); joined people and pending links show.
 function inviteCounts(list) {
-  const n = list.filter((i) => inviteState(i) === 'pending').length;
-  return n ? `${n} open` : 'none open';
+  const n = (k) => list.filter((i) => inviteState(i) === k).length;
+  return [n('joined') ? `${n('joined')} joined` : '', n('pending') ? `${n('pending')} pending` : ''].filter(Boolean).join(' · ') || 'none pending';
 }
 function expiresIn(ts) {
   const days = Math.ceil((new Date(ts) - Date.now()) / 86400000);
@@ -1431,12 +1431,15 @@ async function viewInvites() {
   const list = await loadMyInvites();
   const of = (k) => list.filter((i) => inviteState(i) === k);
   const forLine = (i) => i.for_name ? `For ${esc(i.for_name)}` : 'Invite link';
-  const open = of('pending');
+  const pending = of('pending'), joined = of('joined');
   $app.innerHTML = `
     <a href="#/me">← Me</a>
-    <div><h1>My invites</h1><span class="muted">Links nobody has used yet. Once someone joins, or a link expires after 7 days, it drops off this list.</span></div>
-    ${open.length ? `<div class="list">${open.map((i) => `<div class="spread"><span><strong>${forLine(i)}</strong><br><span class="muted">Made ${when(i.created_at)} · ${expiresIn(i.expires_at)}</span></span>${removeBtn(i, true)}</div>`).join('')}</div>`
-      : '<p class="empty">No open invite links. Tap Invite someone on Me.</p>'}`;
+    <div><h1>My invites</h1><span class="muted">Expired links drop off this list on their own.</span></div>
+    ${pending.length || joined.length ? '' : '<p class="empty">No invites yet. Tap Invite someone on Me.</p>'}
+    ${pending.length ? `<h2>Pending</h2><div class="list">${pending.map((i) => `<div class="spread"><span><strong>${forLine(i)}</strong><br><span class="muted">Made ${when(i.created_at)} · ${expiresIn(i.expires_at)}</span></span>${removeBtn(i, true)}</div>`).join('')}</div>` : ''}
+    ${joined.length ? `<h2>Joined</h2><div class="list">${joined.map((i) => state.people.has(i.used_by)
+      ? `<a class="item" href="#/friend/${encodeURIComponent(i.used_by)}"><span class="row" style="flex-wrap:nowrap">${avatar(i.used_by)}<span>${esc(nameOf(i.used_by))}<br><span class="muted">Joined ${when(i.used_at)}</span></span></span><span class="muted">›</span></a>`
+      : `<div><strong>${i.for_name ? esc(i.for_name) : 'Someone'}</strong><br><span class="muted">Joined ${when(i.used_at)}</span></div>`).join('')}</div>` : ''}`;
 }
 
 // ---------------------------------------------------------------- friend profile
