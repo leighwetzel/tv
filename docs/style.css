@@ -65,7 +65,7 @@ label { font-size: calc(var(--base) - 3px); color: var(--muted); font-weight: 60
 .rtag { color: var(--ink); } .rtag .ricon { color: var(--ink); }
 .r-didnt_like .ricon, .r-gave_up .ricon { color: var(--muted); }
 .tally { display: flex; gap: 16px; margin-top: 2px; }
-.note.clamp { display: -webkit-box; -webkit-line-clamp: 4; -webkit-box-orient: vertical; overflow: hidden; }
+.note.clamp { display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; }
 [hidden] { display: none !important; }
 .me-head { display: flex; gap: 16px; align-items: center; }
 .avatar.lg { width: 88px; height: 88px; font-size: calc(var(--base) + 10px); margin: 0; }

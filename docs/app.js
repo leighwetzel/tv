@@ -214,7 +214,7 @@ function watchOn(id) {
 
 const routes = {
   feed: viewFeed, title: viewTitle, add: viewAdd, quickpick: viewQuickpick,
-  list: viewList, me: viewMe, friend: viewFriend, welcome: viewWelcome, about: viewAbout, following: viewFollowing, passkey: viewPasskey, help: viewHelp,
+  list: viewList, me: viewMe, invites: viewInvites, friend: viewFriend, welcome: viewWelcome, about: viewAbout, following: viewFollowing, passkey: viewPasskey, help: viewHelp,
 };
 
 async function route() {
@@ -238,7 +238,8 @@ async function route() {
   if (!state.me.onboarded && view !== 'quickpick' && view !== 'about' && view !== 'passkey' && view !== 'help') view = 'welcome';
 
   $nav.hidden = view === 'welcome';
-  for (const a of $nav.querySelectorAll('a')) a.classList.toggle('on', a.dataset.tab === view);
+  const tab = view === 'invites' ? 'me' : view;
+  for (const a of $nav.querySelectorAll('a')) a.classList.toggle('on', a.dataset.tab === tab);
   window.scrollTo(0, 0);
   try { await routes[view](...rest.map(decodeURIComponent)); markLongNotes(); }
   catch (e) { console.error(e); $app.innerHTML = '<p class="empty">Couldn’t load this. Pull to refresh or try again.</p>'; }
@@ -631,11 +632,11 @@ function reviewHtml(r) {
       <span class="when">${when(r.activity_at)}</span></div>
     ${r.note ? `<div class="note clamp">${esc(r.note)}</div><button class="link small readmore" data-act="readMore" hidden>Read more</button>` : ''}</div></div>`;
 }
-// Long notes show 4 lines; Read more appears only when a note is actually cut off.
+// Long notes show 3 lines; Read more appears only when a note is actually cut off.
 function markLongNotes() {
   for (const n of document.querySelectorAll('.note.clamp')) {
     const line = parseFloat(getComputedStyle(n).lineHeight) || 26;
-    if (n.scrollHeight > line * 4.5) n.nextElementSibling.hidden = false; // more than 4 lines
+    if (n.scrollHeight > line * 3.5) n.nextElementSibling.hidden = false; // more than 3 lines
   }
 }
 actions.readMore = (d, el) => { el.previousElementSibling.classList.remove('clamp'); el.remove(); };
@@ -885,28 +886,70 @@ actions.qpMore = () => { state.qp = { page: state.qp?.page }; viewQuickpick(); }
 
 // ---------------------------------------------------------------- want to watch
 
+// My list: Watching, Want to watch, Watched. Watching and Want to watch are private to you.
+const LIST_WATCHED_MAX = 10;
 async function viewList() {
-  const { data: rows } = await sb.from('watchlist')
-    .select('title_id, added_at, titles(*), watchlist_credits(recommender_id)')
+  const cols = 'title_id, added_at, titles(*), watchlist_credits(recommender_id)';
+  let { data: rows, error } = await sb.from('watchlist').select(cols + ', started_at')
     .is('watched_at', null).order('added_at', { ascending: false });
+  const canStart = !error; // false until migration 011 adds started_at
+  if (error) ({ data: rows } = await sb.from('watchlist').select(cols).is('watched_at', null).order('added_at', { ascending: false }));
+  const { data: watched, count: nWatched } = await sb.from('ratings')
+    .select('title_id, rating, note, season, activity_at, titles(*)', { count: 'exact' })
+    .eq('user_id', state.me.id).order('activity_at', { ascending: false }).limit(LIST_WATCHED_MAX);
   let items = rows ?? [];
-  await loadProviders(items.map((r) => r.title_id));
+  await loadProviders([...items.map((r) => r.title_id), ...(watched ?? []).map((r) => r.title_id)]);
   if (state.listType !== 'all') items = items.filter((r) => r.titles.media_type === state.listType);
   if (state.listSvc === 'mine') items = items.filter((r) => onMyServices(r.title_id));
   if (state.listSort === 'release') items.sort((a, b) => (b.titles.year ?? 0) - (a.titles.year ?? 0));
+  const watching = items.filter((r) => r.started_at).sort((a, b) => new Date(b.started_at) - new Date(a.started_at));
+  const want = items.filter((r) => !r.started_at);
+  const head = (label, n, extra = '') => `<div class="spread shelf-head"><h2>${label} <span class="muted">${n}</span></h2>${extra}</div>`;
+  const card = (r, buttons, line) => `<div class="card pick-card"><div class="pick">
+      <a href="${titleLink(r.titles)}">${poster(r.titles.poster_path, 'sm')}</a>
+      <div class="pick-body"><a class="title" href="${titleLink(r.titles)}">${esc(r.titles.name)}</a>
+        <span class="muted">${line}</span>${watchOn(r.title_id)}</div></div>
+      <div class="row actions">${buttons}</div></div>`;
+  const from = (r) => {
+    const f = r.watchlist_credits.map((c) => personLink(c.recommender_id));
+    return f.length ? 'from ' + f.join(', ') : 'added by you';
+  };
+  const filtered = (rows ?? []).length > items.length;
   $app.innerHTML = `
-    <h1>Want to watch</h1>
+    <h1>My list</h1>
     ${filterBar('list')}
-    ${items.length ? items.map((r) => {
-      const from = r.watchlist_credits.map((c) => personLink(c.recommender_id));
-      return `<div class="card pick">
-        <a href="${titleLink(r.titles)}">${poster(r.titles.poster_path, 'sm')}</a>
-        <div class="pick-body"><a class="title" href="${titleLink(r.titles)}">${esc(r.titles.name)}</a>
-          <span class="muted">${from.length ? 'from ' + from.join(', ') : 'added by you'}</span>
-          ${watchOn(r.title_id)}</div>
-        <button data-act="watched" data-id="${esc(r.title_id)}">Watched</button></div>`;
-    }).join('') : `<p class="empty">${state.listSvc === 'mine' && (rows ?? []).length ? 'Nothing on your services. Try “All”.' : 'Nothing saved yet. Tap “+ Want to watch” on a friend’s pick.'}</p>`}`;
+    ${canStart ? `${head('Watching', watching.length)}
+    ${watching.length ? watching.map((r) => card(r,
+      `<button class="primary" data-act="watched" data-id="${esc(r.title_id)}">Finished it</button>
+       <button data-act="stopWatching" data-id="${esc(r.title_id)}">Not watching</button>`,
+      `${kind(r.titles)} · started ${when(r.started_at)}`)).join('')
+      : `<p class="muted">${filtered ? 'Nothing here with these filters.' : 'Tap <b>Start watching</b> on anything below.'}</p>`}` : ''}
+    ${head('Want to watch', want.length)}
+    ${want.length ? want.map((r) => card(r,
+      `${canStart ? `<button class="primary" data-act="startWatching" data-id="${esc(r.title_id)}">Start watching</button>` : ''}
+       <button data-act="watched" data-id="${esc(r.title_id)}">Watched</button>`,
+      from(r))).join('')
+      : `<p class="muted">${filtered ? 'Nothing here with these filters. Try “All”.' : 'Nothing saved yet. Tap “+ Want to watch” on a friend’s pick.'}</p>`}
+    ${head('Watched', nWatched ?? 0, (nWatched ?? 0) > LIST_WATCHED_MAX ? `<a class="small" href="#/friend/${state.me.id}/all">See all</a>` : '')}
+    ${watched?.length ? watched.map((r) => `<div class="card pick-card"><div class="pick">
+      <a href="${titleLink(r.titles)}">${poster(r.titles.poster_path, 'sm')}</a>
+      <div class="pick-body"><a class="title" href="${titleLink(r.titles)}">${esc(r.titles.name)}</a>
+        <span class="muted"><strong>${ratingLabel(r)}</strong> · ${when(r.activity_at)}</span>
+        ${r.note ? `<div class="note clamp">${esc(r.note)}</div><button class="link small readmore" data-act="readMore" hidden>Read more</button>` : ''}</div></div></div>`).join('')
+      : '<p class="muted">Nothing rated yet. Tap Add to rate a show.</p>'}
+    ${(nWatched ?? 0) > LIST_WATCHED_MAX ? `<a class="btn big" href="#/friend/${state.me.id}/all">See all ${nWatched} watched</a>` : ''}`;
 }
+actions.startWatching = async (d) => {
+  const { error } = await sb.from('watchlist').update({ started_at: new Date().toISOString() }).eq('user_id', state.me.id).eq('title_id', d.id);
+  if (error) throw error;
+  route();
+};
+actions.stopWatching = async (d) => {
+  const { error } = await sb.from('watchlist').update({ started_at: null }).eq('user_id', state.me.id).eq('title_id', d.id);
+  if (error) throw error;
+  toast('Moved back to Want to watch');
+  route();
+};
 actions.watched = async (d) => {
   const { data: t } = await sb.from('titles').select('*').eq('id', d.id).single();
   $app.innerHTML = `
@@ -930,6 +973,7 @@ async function viewMe() {
     sb.from('invite_requests').select('id, name, email, knows, created_at').is('handled', null).order('created_at', { ascending: false }).limit(50),
     sb.rpc('gets_invite_requests'), // true only for you, so the section (and any error) shows only to you
   ]);
+  const myInvites = await loadMyInvites();
   if (reqsErr) console.error('invite_requests', reqsErr);
   const faceOn = !keysErr && Array.isArray(keys) && keys.length > 0;
   const canInvite = invitesClosed ? state.me.is_host : true;
@@ -963,6 +1007,7 @@ async function viewMe() {
     <div class="row" id="svc">${serviceChips('toggleMySvc')}</div>
     ${canInvite ? '<div class="spread"><h2>Invite</h2><button class="primary" data-act="invite">Invite someone</button></div>' : ''}
     <div id="inviteBox"></div>
+    ${myInvites.length ? `<div class="list"><a class="item" href="#/invites"><span><strong>My invites</strong> <span class="muted">· ${inviteCounts(myInvites)}</span></span><span class="muted">›</span></a></div>` : ''}
     ${keysErr ? '' : `<div class="list"><div class="item"><span><strong>Sign in with ${bioName()}</strong> <span class="muted">· ${faceOn ? 'On' : 'Off'}</span></span>
       ${faceOn ? '' : `<button data-act="addPasskey">Turn on</button>`}</div></div>`}
     ${state.followsReady ? `<div class="list"><a class="item" href="#/following"><span><strong>Following</strong> <span class="muted">· ${state.following.size} ${state.following.size === 1 ? 'person' : 'people'}</span></span><span class="muted">›</span></a></div>` : ''}
@@ -1080,14 +1125,30 @@ actions.saveName = async () => {
   document.getElementById('myName').blur();
   toast('Name saved');
 };
-actions.invite = async () => {
-  const { data, error } = await sb.from('invites').insert({ created_by: state.me.id }).select('code').single();
-  if (error) return toast('Couldn’t make a link. You can have up to 10 unused links at a time.');
-  const url = `${location.origin}${location.pathname}?invite=${data.code}`;
-  state.invitesMade = (state.invitesMade ?? 0) + 1;
+// Invite links. Each one works once, for 7 days. "Who's it for?" is optional and only you see it.
+async function insertInvite(forName) {
+  const row = { created_by: state.me.id };
+  if (forName) row.for_name = forName.slice(0, 80);
+  let res = await sb.from('invites').insert(row).select('code').single();
+  if (res.error && /for_name/.test(res.error.message)) { delete row.for_name; res = await sb.from('invites').insert(row).select('code').single(); } // before migration 011
+  return res;
+}
+actions.invite = () => {
   document.getElementById('inviteBox').innerHTML = `<div class="card field">
-    ${state.invitesMade > 1 ? '<p class="muted small">New link ready.</p>' : ''}
-    <p><strong>For one person only.</strong> The link works once, for 7 days.</p>
+    <label for="inviteFor">Who’s it for? (optional)</label>
+    <input id="inviteFor" maxlength="80" autocomplete="off" placeholder="Their name">
+    <p class="muted small">Only you see this, on My invites.</p>
+    <button class="primary big" data-act="makeInvite">Make link</button></div>`;
+  document.getElementById('inviteFor').focus();
+};
+actions.makeInvite = async (d, el) => {
+  el.disabled = true;
+  const forName = document.getElementById('inviteFor')?.value.trim() || '';
+  const { data, error } = await insertInvite(forName);
+  if (error) { el.disabled = false; return toast('Couldn’t make a link. You can have up to 10 unused links at a time.'); }
+  const url = `${location.origin}${location.pathname}?invite=${data.code}`;
+  document.getElementById('inviteBox').innerHTML = `<div class="card field">
+    <p><strong>${forName ? `For ${esc(forName)} only.` : 'For one person only.'}</strong> The link works once, for 7 days.</p>
     <input readonly value="${esc(url)}" id="inviteUrl" aria-label="Invite link">
     <button class="primary big" data-act="shareInvite">Send link</button>
     <button class="big" data-act="invite">New link</button></div>`;
@@ -1095,7 +1156,7 @@ actions.invite = async () => {
 // Make a fresh one-person link and open a ready-to-send email to the requester in your Mail app.
 actions.inviteRequest = async (d, el) => {
   el.disabled = true;
-  const { data, error } = await sb.from('invites').insert({ created_by: state.me.id }).select('code').single();
+  const { data, error } = await insertInvite(d.name);
   if (error) { el.disabled = false; return toast('Couldn’t make a link. You can have up to 10 unused links at a time.'); }
   const url = `${location.origin}${location.pathname}?invite=${data.code}`;
   await sb.from('invite_requests').update({ handled: 'invited', handled_at: new Date().toISOString() }).eq('id', d.id);
@@ -1143,6 +1204,40 @@ function viewAbout() {
     <p class="credits">This product uses the TMDB API but is not endorsed or certified by TMDB. Title data and images from <a href="https://www.themoviedb.org">TMDB</a>. Streaming data from <a href="https://www.justwatch.com">JustWatch</a>. Dinosaur from <a href="https://github.com/googlefonts/noto-emoji">Noto Emoji</a> (Apache 2.0).</p>`;
 }
 
+// ---------------------------------------------------------------- my invites
+
+async function loadMyInvites() {
+  const cols = 'code, created_at, used_by, used_at, expires_at';
+  let { data, error } = await sb.from('invites').select(cols + ', for_name').eq('created_by', state.me.id).order('created_at', { ascending: false });
+  if (error) ({ data } = await sb.from('invites').select(cols).eq('created_by', state.me.id).order('created_at', { ascending: false })); // before migration 011
+  return data ?? [];
+}
+const inviteState = (i) => i.used_by ? 'joined' : new Date(i.expires_at) > new Date() ? 'pending' : 'expired';
+function inviteCounts(list) {
+  const n = (k) => list.filter((i) => inviteState(i) === k).length;
+  return [`${n('joined')} joined`, n('pending') ? `${n('pending')} pending` : ''].filter(Boolean).join(' · ');
+}
+function expiresIn(ts) {
+  const days = Math.ceil((new Date(ts) - Date.now()) / 86400000);
+  return days <= 1 ? 'expires within a day' : `expires in ${days}d`;
+}
+async function viewInvites() {
+  await loadPeople();
+  const list = await loadMyInvites();
+  const of = (k) => list.filter((i) => inviteState(i) === k);
+  const forLine = (i) => i.for_name ? `For ${esc(i.for_name)}` : 'Invite link';
+  const section = (label, rows, line) => rows.length ? `<h2>${label}</h2><div class="list">${rows.map(line).join('')}</div>` : '';
+  $app.innerHTML = `
+    <a href="#/me">← Me</a>
+    <div><h1>My invites</h1><span class="muted">${list.length} sent${list.length ? ' · ' + inviteCounts(list) : ''}</span></div>
+    ${list.length ? '' : '<p class="empty">No invites yet. Tap Invite someone on Me.</p>'}
+    ${section('Pending', of('pending'), (i) => `<div><strong>${forLine(i)}</strong><br><span class="muted">Made ${when(i.created_at)} · ${expiresIn(i.expires_at)}</span></div>`)}
+    ${section('Joined', of('joined'), (i) => state.people.has(i.used_by)
+      ? `<a class="item" href="#/friend/${encodeURIComponent(i.used_by)}"><span class="row" style="flex-wrap:nowrap">${avatar(i.used_by)}<span>${esc(nameOf(i.used_by))}<br><span class="muted">Joined ${when(i.used_at)}</span></span></span><span class="muted">›</span></a>`
+      : `<div><strong>${i.for_name ? esc(i.for_name) : 'Someone'}</strong><br><span class="muted">Joined ${when(i.used_at)}</span></div>`)}
+    ${section('Expired', of('expired'), (i) => `<div><span>${forLine(i)}</span><br><span class="muted">Made ${when(i.created_at)} · not used</span></div>`)}`;
+}
+
 // ---------------------------------------------------------------- friend profile
 
 // Poster row that scrolls sideways (like Goodreads' "Recently read"). Each poster opens the title.
@@ -1175,7 +1270,6 @@ function friendSummary(id, p, rs) {
   const base = `#/friend/${encodeURIComponent(id)}`;
   const stat = (n, label, f) => `<a href="${base}/${f}"><strong>${n}</strong><span>${label}</span></a>`;
   const section = (k, label) => of(k).length ? `<div class="spread shelf-head"><h2>${label}</h2><a class="small" href="${base}/${k}">See all ${of(k).length}</a></div>${shelf(of(k), `${base}/${k}`)}` : '';
-  const mixed = rs.filter((r) => !POSITIVE.includes(r.rating));
   $app.innerHTML = `
     <a href="javascript:history.back()">← Back</a>
     <div class="spread"><h1>${esc(isMe(id) ? 'My picks' : p.name)}</h1>
@@ -1184,7 +1278,8 @@ function friendSummary(id, p, rs) {
     ${rs.length ? `<div class="spread shelf-head"><h2>Recently rated</h2><a class="small" href="${base}/all">See all</a></div>${shelf(rs, `${base}/all`)}` : '<p class="empty">Nothing rated yet.</p>'}
     ${section('loved', 'Loved')}
     ${section('liked', 'Liked')}
-    ${mixed.length ? `<a class="btn big" href="${base}/mixed">Didn’t like or gave up · ${mixed.length}</a>` : ''}`;
+    ${section('didnt_like', 'Didn’t like')}
+    ${section('gave_up', 'Gave up')}`;
 }
 
 const PAGE = 20;
@@ -1198,7 +1293,7 @@ async function friendList(id, p, all, filter, limit = PAGE, mineToo = null) {
   const match = (r) => filter === 'all' || (filter === 'mixed' ? !POSITIVE.includes(r.rating) : r.rating === filter);
   const matching = all.filter(match);
   const shown = matching.slice(0, limit);
-  const heading = { all: 'All ratings', loved: 'Loved', liked: 'Liked', mixed: 'Didn’t like or gave up' }[filter] ?? 'All ratings';
+  const heading = { all: 'All ratings', loved: 'Loved', liked: 'Liked', didnt_like: 'Didn’t like', gave_up: 'Gave up', mixed: 'Didn’t like or gave up' }[filter] ?? 'All ratings';
   await loadProviders(shown.map((r) => r.title_id));
   $app.innerHTML = `
     <a href="#/friend/${encodeURIComponent(id)}">← ${esc(isMe(id) ? 'My picks' : p.name)}</a>
@@ -1207,7 +1302,7 @@ async function friendList(id, p, all, filter, limit = PAGE, mineToo = null) {
       <a href="${titleLink(r.titles)}">${poster(r.titles.poster_path, 'sm')}</a>
       <div class="pick-body"><a class="title" href="${titleLink(r.titles)}">${esc(r.titles.name)}</a>
         <span class="muted">${filter === 'all' || filter === 'mixed' ? ratingLabel(r) + ' · ' : ''}${kind(r.titles)}${filter !== 'all' && filter !== 'mixed' && r.season ? ' · S' + r.season : ''}</span>${watchOn(r.title_id)}
-        ${r.note ? `<div class="note">${esc(r.note)}</div>` : ''}</div></div>
+        ${r.note ? `<div class="note clamp">${esc(r.note)}</div><button class="link small readmore" data-act="readMore" hidden>Read more</button>` : ''}</div></div>
       ${isMe(id) ? '' : `<div class="row actions">${myRating.has(r.title_id) ? `<span class="muted">You: <strong>${ratingLabel(myRating.get(r.title_id))}</strong></span>`
         : saved.has(r.title_id) ? SAVED
         : `<button class="primary" data-act="save" data-id="${esc(r.title_id)}">+ Want to watch</button>`}
