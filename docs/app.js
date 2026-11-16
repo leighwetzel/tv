@@ -79,8 +79,8 @@ const BRAND = `<header class="brand">
   <div><h1>TV Rex</h1><p class="tagline">Picks from friends and family</p></div></header>`;
 const FOOTER = `<footer class="appfooter">
   <a class="other" href="https://walk.xoleigh.com"><img src="https://walk.xoleigh.com/icons/icon-192.png?v=4" alt="">
-    <span><strong>Also try Wiki Walk</strong><span class="muted">Nearby Wikipedia, read aloud</span></span><span class="muted" aria-hidden="true">›</span></a>
-  <div class="links"><a href="#/feedback">Feedback</a><a href="https://xoleigh.com">xoleigh.com</a></div>
+    <span><strong>Try Wiki Walk</strong><span class="muted">A walking tour in your pocket</span></span></a>
+  <div class="links"><a href="https://xoleigh.com">xoleigh.com</a><span aria-hidden="true">·</span><a href="#/feedback">Feedback</a></div>
 </footer>`;
 const personLink = (id) => `<a class="person" href="#/friend/${encodeURIComponent(id)}">${esc(nameOf(id))}</a>`;
 const SAVED = '<span class="btn saved">✓ Saved</span>';
