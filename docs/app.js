@@ -1581,7 +1581,10 @@ sb.auth.onAuthStateChange((event, session) => {
     if (session.user.id !== was) {
       state.me = null;
       await redeemPendingInvite();
-      if (event === 'SIGNED_IN') return signedIn();
+      // Supabase also says SIGNED_IN when it restores a saved session on reload; only a real sign-in
+      // (from the sign-in screen or an email link) jumps to the feed. Otherwise stay on the page you were on.
+      const fresh = state.codeSignIn || !location.hash || /^#\/(signin|request)?$|access_token/.test(location.hash);
+      if (event === 'SIGNED_IN' && fresh) return signedIn();
       route();
     }
   }, 0);
@@ -1597,31 +1600,46 @@ async function signedIn() {
 }
 
 // ---------------------------------------------------------------- pull to refresh
-// From the Home Screen, iOS gives web apps no pull-to-refresh (Safari tabs have their own), so add one:
-// pull down from the top of any page past the line and let go to reload.
+// From the Home Screen, iOS gives web apps no pull-to-refresh (Safari tabs have their own), so add one.
+// The page itself stays put (no rubber band); a small circle slides down, spins, and the current page
+// redraws with fresh data, without a full reload. A new app version still reloads the whole app.
 if (navigator.standalone || matchMedia('(display-mode: standalone)').matches) {
+  document.documentElement.classList.add('standalone');
   const ptr = document.createElement('div');
   ptr.className = 'ptr'; ptr.setAttribute('aria-hidden', 'true');
-  ptr.innerHTML = '<svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14M6 13l6 6 6-6"/></svg>';
+  ptr.innerHTML = '<svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 1 1-3-6.7L21 8"/><path d="M21 3v5h-5"/></svg>';
   document.body.append(ptr);
-  const PULL = 80;
-  let startY = null, dy = 0;
+  const PULL = 70, MAX = 110;
+  let startY = null, dy = 0, busy = false;
+  const place = (y, turn) => { ptr.style.transform = `translate(-50%, ${y}px) rotate(${turn}deg)`; };
+  const reset = () => { ptr.classList.remove('dragging', 'ready', 'loading'); ptr.style.transform = ''; };
   addEventListener('touchstart', (e) => {
-    startY = window.scrollY <= 0 && e.touches.length === 1 && !document.body.classList.contains('sheet-open') ? e.touches[0].clientY : null;
+    startY = !busy && window.scrollY <= 0 && e.touches.length === 1 && !document.body.classList.contains('sheet-open') ? e.touches[0].clientY : null;
     dy = 0;
   }, { passive: true });
   addEventListener('touchmove', (e) => {
     if (startY === null) return;
+    if (window.scrollY > 0) { startY = null; return reset(); }
     dy = Math.max(0, e.touches[0].clientY - startY);
-    if (window.scrollY > 0) { startY = null; dy = 0; }
-    const d = Math.min(dy, PULL * 1.5);
-    ptr.style.transform = `translate(-50%, ${d * 0.8 - 56}px) rotate(${dy >= PULL ? 180 : 0}deg)`;
-    ptr.classList.toggle('ready', dy >= PULL);
+    const d = Math.min(dy * 0.6, MAX);
+    ptr.classList.add('dragging');
+    ptr.classList.toggle('ready', dy * 0.6 >= PULL);
+    place(d - 48, d * 3);
   }, { passive: true });
-  addEventListener('touchend', () => {
-    if (startY !== null && dy >= PULL) { ptr.classList.add('loading'); ptr.style.transform = 'translate(-50%, 24px)'; location.reload(); return; }
-    startY = null; dy = 0;
-    ptr.classList.remove('ready');
-    ptr.style.transform = '';
+  addEventListener('touchend', async () => {
+    if (startY === null) return;
+    startY = null;
+    if (dy * 0.6 < PULL) return reset();
+    busy = true;
+    ptr.classList.remove('dragging'); ptr.classList.add('loading'); place(PULL - 30, 0);
+    try {
+      const html = await (await fetch(`./index.html?check=${Date.now()}`, { cache: 'no-store' })).text();
+      const latest = html.match(/app\.js\?v=(\d+)/)?.[1];
+      const mine = document.querySelector('script[src*="app.js?v="]')?.src.match(/v=(\d+)/)?.[1];
+      if (latest && mine && latest !== mine) return location.replace(`${location.pathname}?v=${latest}${location.hash}`);
+      if (state.session) await loadPeople();
+      await route();
+    } catch (e) { console.error('refresh', e); }
+    busy = false; reset();
   });
 }
