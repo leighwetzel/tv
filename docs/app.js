@@ -1407,15 +1407,16 @@ async function loadMyInvites() {
   return data ?? [];
 }
 const inviteState = (i) => i.used_by ? 'joined' : new Date(i.expires_at) > new Date() ? 'pending' : 'expired';
+// Only open links count; joined and expired ones drop off My invites on their own (Nov 16).
 function inviteCounts(list) {
-  const n = (k) => list.filter((i) => inviteState(i) === k).length;
-  return [`${n('joined')} joined`, n('pending') ? `${n('pending')} pending` : ''].filter(Boolean).join(' · ');
+  const n = list.filter((i) => inviteState(i) === 'pending').length;
+  return n ? `${n} open` : 'none open';
 }
 function expiresIn(ts) {
   const days = Math.ceil((new Date(ts) - Date.now()) / 86400000);
   return days <= 1 ? 'expires within a day' : `expires in ${days}d`;
 }
-// Unused links (pending or expired) can be removed; joined ones stay (migration 016).
+// Open links can be removed (migration 016).
 const removeBtn = (i, live) => `<button class="small" data-act="removeInvite" data-code="${esc(i.code)}" data-live="${live ? 1 : ''}" aria-label="Remove ${i.for_name ? 'link for ' + esc(i.for_name) : 'this link'}">Remove</button>`;
 actions.removeInvite = async (d, el) => {
   if (d.live && !confirm('Remove this link? It will stop working.')) return;
@@ -1425,29 +1426,17 @@ actions.removeInvite = async (d, el) => {
   toast('Link removed');
   viewInvites();
 };
-actions.removeExpired = async (d, el) => {
-  el.disabled = true;
-  const { error } = await sb.from('invites').delete().eq('created_by', state.me.id).is('used_by', null).lte('expires_at', new Date().toISOString());
-  if (error) { el.disabled = false; console.error('remove expired', error); return toast('Couldn’t remove them. Try again.'); }
-  toast('Expired links removed');
-  viewInvites();
-};
 async function viewInvites() {
   await loadPeople();
   const list = await loadMyInvites();
   const of = (k) => list.filter((i) => inviteState(i) === k);
   const forLine = (i) => i.for_name ? `For ${esc(i.for_name)}` : 'Invite link';
-  const section = (label, rows, line) => rows.length ? `<h2>${label}</h2><div class="list">${rows.map(line).join('')}</div>` : '';
+  const open = of('pending');
   $app.innerHTML = `
     <a href="#/me">← Me</a>
-    <div><h1>My invites</h1><span class="muted">${list.length} sent${list.length ? ' · ' + inviteCounts(list) : ''}</span></div>
-    ${list.length ? '' : '<p class="empty">No invites yet. Tap Invite someone on Me.</p>'}
-    ${section('Pending', of('pending'), (i) => `<div class="spread"><span><strong>${forLine(i)}</strong><br><span class="muted">Made ${when(i.created_at)} · ${expiresIn(i.expires_at)}</span></span>${removeBtn(i, true)}</div>`)}
-    ${section('Joined', of('joined'), (i) => state.people.has(i.used_by)
-      ? `<a class="item" href="#/friend/${encodeURIComponent(i.used_by)}"><span class="row" style="flex-wrap:nowrap">${avatar(i.used_by)}<span>${esc(nameOf(i.used_by))}<br><span class="muted">Joined ${when(i.used_at)}</span></span></span><span class="muted">›</span></a>`
-      : `<div><strong>${i.for_name ? esc(i.for_name) : 'Someone'}</strong><br><span class="muted">Joined ${when(i.used_at)}</span></div>`)}
-    ${of('expired').length > 1 ? '<button class="link" data-act="removeExpired" style="align-self:flex-start">Remove all expired links</button>' : ''}
-    ${section('Expired', of('expired'), (i) => `<div class="spread"><span>${forLine(i)}<br><span class="muted">Made ${when(i.created_at)} · not used</span></span>${removeBtn(i, false)}</div>`)}`;
+    <div><h1>My invites</h1><span class="muted">Links nobody has used yet. Once someone joins, or a link expires after 7 days, it drops off this list.</span></div>
+    ${open.length ? `<div class="list">${open.map((i) => `<div class="spread"><span><strong>${forLine(i)}</strong><br><span class="muted">Made ${when(i.created_at)} · ${expiresIn(i.expires_at)}</span></span>${removeBtn(i, true)}</div>`).join('')}</div>`
+      : '<p class="empty">No open invite links. Tap Invite someone on Me.</p>'}`;
 }
 
 // ---------------------------------------------------------------- friend profile
