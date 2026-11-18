@@ -10,7 +10,8 @@
 //   POST {mode:"send"}               from the weekly GitHub Action. Sends only on Sunday 8–11 a.m. Pacific,
 //                                    once per person per week. {force:true} skips the time check.
 //   POST {mode:"test", as?:"Rick"}   sends the hosts a copy (of their own email, or of Rick's). Logs nothing.
-//   GET/POST ?u=<id>&t=<token>       the email's "Stop these emails" link and the one-click unsubscribe header.
+//   POST ?u=<id>&t=<token>           turns the email off: the app's Stop page, or a mail app's one-click unsubscribe.
+//                                    A GET only redirects to that page, so link scanners can't unsubscribe anyone.
 // POST calls need the DIGEST_KEY GitHub secret (checked against its hash below) or the service role key. Deployed with --no-verify-jwt so the
 // unsubscribe link works from an email, where nobody is signed in.
 //
@@ -67,6 +68,9 @@ async function token(userId: string) {
   const sig = new Uint8Array(await crypto.subtle.sign('HMAC', key, new TextEncoder().encode('unsub:' + userId)));
   return [...sig.slice(0, 16)].map((b) => b.toString(16).padStart(2, '0')).join('');
 }
+// Footer link: a page in the app that asks before turning the email off (link scanners can't trip it).
+const unsubPage = async (id: string) => `${APP}/#/unsubscribe/${encodeURIComponent(id)}/${await token(id)}`;
+// List-Unsubscribe header: mail apps' one-click unsubscribe POSTs here.
 const unsubUrl = async (id: string) => `${FN_URL}?u=${encodeURIComponent(id)}&t=${await token(id)}`;
 
 // Same cleanup as the tmdb function: one clean name per service, no rent/buy stores.
@@ -231,7 +235,8 @@ const heading = (text: string, sub = '') =>
   `<tr><td style="padding:22px 16px ${sub ? '2px' : '8px'};font-family:${FONT};font-size:15px;font-weight:600;letter-spacing:0.04em;text-transform:uppercase;color:${C.muted}">${esc(text)}</td></tr>` +
   (sub ? `<tr><td style="padding:0 16px 10px;font-family:${FONT};font-size:15px;color:${C.muted}">${esc(sub)}</td></tr>` : '');
 
-async function buildEmail(person: any, picks: Awaited<ReturnType<typeof picksFor>>, names: Map<string, any>) {
+// unsubFor: whose unsubscribe link goes in the email (a test copy carries the host's own, never the person's).
+async function buildEmail(person: any, picks: Awaited<ReturnType<typeof picksFor>>, names: Map<string, any>, unsubFor: string = person.id) {
   const all = [...picks.fromFollowed, ...picks.popular];
   const services = await servicesFor(all.map((p) => p.title.id));
   const first = (person.name || '').split(' ')[0];
@@ -248,7 +253,8 @@ async function buildEmail(person: any, picks: Awaited<ReturnType<typeof picksFor
   const preheader = n
     ? `${total} from people you follow${picks.popular.length ? `, ${picks.popular.length} popular` : ''}`
     : `${all.length} popular ${all.length === 1 ? 'pick' : 'picks'} you haven't seen`;
-  const unsub = await unsubUrl(person.id);
+  const unsub = await unsubUrl(unsubFor);
+  const unsubLink = await unsubPage(unsubFor);
 
   const html = `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="color-scheme" content="light only"><title>${esc(subject)}</title></head>
 <body style="margin:0;padding:0;background:${C.page}">
@@ -273,7 +279,7 @@ async function buildEmail(person: any, picks: Awaited<ReturnType<typeof picksFor
   </td></tr>
   <tr><td style="padding:28px 16px 32px;font-family:${FONT};font-size:15px;line-height:1.4;color:${C.muted}">
     <div style="border-top:1px solid ${C.line};padding-top:20px">You get this on Sundays when there are new picks from people you follow, or popular ones you haven't seen. Nothing new, no email.</div>
-    <div style="padding-top:8px"><a href="${esc(unsub)}" style="color:${C.blue}">Stop these emails</a> · <a href="${esc(link('', 'footer'))}" style="color:${C.blue}">tv.xoleigh.com</a></div>
+    <div style="padding-top:8px"><a href="${esc(unsubLink)}" style="color:${C.blue}">Stop these emails</a> · <a href="${esc(link('', 'footer'))}" style="color:${C.blue}">tv.xoleigh.com</a></div>
     <div style="padding-top:8px">Streaming info from JustWatch.</div>
   </td></tr>
 </table></td></tr></table></body></html>`;
@@ -283,7 +289,7 @@ async function buildEmail(person: any, picks: Awaited<ReturnType<typeof picksFor
     ...all.map((p) => [`${p.title.name} (${p.title.media_type === 'tv' ? 'TV' : 'Movie'})${(services.get(p.title.id) ?? []).length ? ' · ' + services.get(p.title.id)!.join(', ') : ''}`,
       ...p.reviews.map((r) => `  ${names.get(r.user_id)?.name || 'Someone'} ${WORD[r.rating]}${r.note ? ': ' + r.note : ''}`),
       `  ${link(`/title/${encodeURIComponent(p.title.id)}`, 'text-title')}`, ''].join('\n')),
-    `Open TV Rex: ${link('', 'text-open-app')}`, `Stop these emails: ${unsub}`,
+    `Open TV Rex: ${link('', 'text-open-app')}`, `Stop these emails: ${unsubLink}`,
   ].join('\n');
 
   return { subject, html, text, unsub, titleIds: all.map((p) => p.title.id) };
@@ -356,7 +362,7 @@ async function runTest(as?: string) {
     const person = target ?? host;
     const picks = await picksFor(person.id, world);
     if (!picks.fromFollowed.length && !picks.popular.length) { out.push(`${person.name}: nothing new this week, so no email`); continue; }
-    const email = await buildEmail(person, picks, world.people);
+    const email = await buildEmail(person, picks, world.people, host.id);
     const to = world.emails.get(host.id);
     if (!to) continue;
     await send(to, { ...email, subject: `[Test${target ? ` for ${person.name}` : ''}] ${email.subject}` });
@@ -377,10 +383,16 @@ async function unsubscribe(url: URL) {
 Deno.serve(async (req) => {
   const url = new URL(req.url);
   try {
+    const cors = { 'Access-Control-Allow-Origin': APP, 'Access-Control-Allow-Methods': 'POST, OPTIONS' };
+    if (req.method === 'OPTIONS') return new Response(null, { status: 204, headers: cors });
     if (url.searchParams.has('u')) {
-      const ok = await unsubscribe(url);
-      if (req.method === 'POST') return new Response(ok ? 'ok' : 'bad link', { status: ok ? 200 : 400 });
-      return Response.redirect(`${APP}/#/unsubscribed${ok ? '' : '/bad'}`, 302);
+      // Only a POST turns the email off (the app's button, or a mail app's one-click unsubscribe).
+      // A GET (someone or a link scanner opening the URL) goes to the app's page, which asks first.
+      if (req.method === 'POST') {
+        const ok = await unsubscribe(url);
+        return new Response(ok ? 'ok' : 'bad link', { status: ok ? 200 : 400, headers: cors });
+      }
+      return Response.redirect(`${APP}/#/unsubscribe/${encodeURIComponent(url.searchParams.get('u') ?? '')}/${encodeURIComponent(url.searchParams.get('t') ?? '')}`, 302);
     }
     const bearer = (req.headers.get('Authorization') ?? '').replace('Bearer ', '');
     if (req.method !== 'POST' || !bearer || (bearer !== SERVICE_KEY && await sha256(bearer) !== CALL_KEY_SHA256)) return new Response('Not allowed', { status: 401 });

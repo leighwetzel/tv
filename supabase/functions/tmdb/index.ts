@@ -126,32 +126,6 @@ async function services() {
 
 // One quick-pick batch: current popular titles plus all-time classics,
 // only titles streaming on the given subscription services in the US.
-async function discover(providerIds: number[], page: number) {
-  const with_watch_providers = providerIds.join('|');
-  const base = { watch_region: REGION, with_watch_providers, include_adult: 'false', page };
-  const yearCut = new Date().getFullYear() - 10;
-  const [tvNow, movieNow, tvClassic, movieClassic] = await Promise.all([
-    tmdb('/discover/tv', { ...base, sort_by: 'popularity.desc' }),
-    tmdb('/discover/movie', { ...base, sort_by: 'popularity.desc' }),
-    tmdb('/discover/tv', { ...base, sort_by: 'vote_count.desc', 'first_air_date.lte': `${yearCut}-12-31` }),
-    tmdb('/discover/movie', { ...base, sort_by: 'vote_count.desc', 'primary_release_date.lte': `${yearCut}-12-31` }),
-  ]);
-  const now = interleave(tvNow.results.map((r: any) => toTitle(r, 'tv')), movieNow.results.map((r: any) => toTitle(r, 'movie')));
-  const classic = interleave(tvClassic.results.map((r: any) => toTitle(r, 'tv')), movieClassic.results.map((r: any) => toTitle(r, 'movie')));
-  const titles = [...now, ...classic].filter(Boolean) as Title[];
-  await saveTitles(titles);
-  return { now: now.filter(Boolean), classic: classic.filter(Boolean) };
-}
-
-function interleave<T>(a: T[], b: T[]) {
-  const out: T[] = [];
-  for (let i = 0; i < Math.max(a.length, b.length); i++) {
-    if (a[i]) out.push(a[i]);
-    if (b[i]) out.push(b[i]);
-  }
-  return out;
-}
-
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response('ok', { headers: cors });
 
@@ -217,8 +191,6 @@ Deno.serve(async (req) => {
       }
       case 'services':
         return json({ services: await services() });
-      case 'discover':
-        return json(await discover(body.providers ?? [], Number(body.page ?? 1)));
       default:
         return json({ error: 'Unknown action' }, 400);
     }
