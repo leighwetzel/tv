@@ -69,6 +69,26 @@ function avatar(id, p = state.people.get(id)) {
 const isMine = (svc) => svc.ids.some((i) => myServices().includes(i));
 
 const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+
+// Loading screen: Rex holds still while the remote's yellow lines flicker. Same markup as the first
+// paint in index.html. Pass a line to show it as is; leave it out to rotate the quips.
+const QUIPS = ['Flipping channels…', 'Asking your friends…', 'Skipping the intro…', 'Checking the couch cushions…', 'Finding the remote…', 'Rewinding…'];
+const loader = (line) => `
+  <div class="loader" role="status"><span class="sr-only">Loading</span>
+    <div class="rex-load" aria-hidden="true"><img src="rex-loading.png?v=1" alt=""><svg viewBox="0 0 192 192">
+      <line x1="159.9" y1="72.7" x2="154.3" y2="83.9" style="--sx:-3px;--sy:6px;--ex:2px;--ey:-4px"/>
+      <line x1="172.1" y1="80.6" x2="162.7" y2="89.1" style="--sx:-4.5px;--sy:4px;--ex:3px;--ey:-3px"/>
+      <line x1="177.6" y1="93.9" x2="169.3" y2="96.1" style="--sx:-6px;--sy:1.5px;--ex:4px;--ey:-1px"/>
+    </svg></div>
+    <p class="loader-q" aria-hidden="true"${line ? '' : ' data-rotate'}>${esc(line || QUIPS[0])}</p>
+  </div>`;
+setInterval(() => {
+  const q = document.querySelector('.loader-q[data-rotate]');
+  if (!q) return;
+  const i = (Number(q.dataset.i) || 0) + 1;
+  q.classList.add('fade');
+  setTimeout(() => { q.dataset.i = i; q.textContent = QUIPS[i % QUIPS.length]; q.classList.remove('fade'); }, 250);
+}, 1800);
 const poster = (path, cls = '') => path
   ? `<img class="poster ${cls}" src="${IMG}${['xl', 'lg', 'tile'].includes(cls) ? 'w342' : 'w185'}${esc(path)}" alt="" loading="lazy">`
   : `<div class="poster ${cls}" aria-hidden="true"></div>`;
@@ -969,7 +989,7 @@ async function buildRound() {
 async function viewQuickpick() {
   if (!state.qp?.cards || state.qp.i >= state.qp.cards.length) {
     if (state.qp?.cards && state.qp.i >= state.qp.cards.length) return roundDone();
-    $app.innerHTML = '<p class="loading">Finding titles…</p>';
+    $app.innerHTML = loader('Finding titles…');
     await buildRound();
   }
   const { cards, i, lovedBy } = state.qp;
