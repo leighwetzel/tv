@@ -11,7 +11,7 @@
 //                                    once per person per week. {force:true} skips the time check.
 //   POST {mode:"test", as?:"Rick"}   sends the hosts a copy (of their own email, or of Rick's). Logs nothing.
 //   GET/POST ?u=<id>&t=<token>       the email's "Stop these emails" link and the one-click unsubscribe header.
-// POST calls need the DIGEST_KEY secret (or the service role key) as the Bearer token. Deployed with --no-verify-jwt so the
+// POST calls need the DIGEST_KEY GitHub secret (checked against its hash below) or the service role key. Deployed with --no-verify-jwt so the
 // unsubscribe link works from an email, where nobody is signed in.
 //
 // Secrets: RESEND_API_KEY (Resend > API Keys, sending access). TMDB_TOKEN is already set for the tmdb function.
@@ -28,6 +28,12 @@ const REVIEWS_PER_CARD = 3;
 const DAY = 24 * 60 * 60 * 1000;
 
 const SERVICE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
+// SHA-256 of the DIGEST_KEY GitHub Actions secret. Only the hash lives here, so the public repo doesn't expose the key.
+const CALL_KEY_SHA256 = 'e767ea4589ac32d1ea51a9df666c65cc7cd8749a3aab674213d738e3a4ec8076';
+async function sha256(x: string) {
+  const d = new Uint8Array(await crypto.subtle.digest('SHA-256', new TextEncoder().encode(x)));
+  return [...d].map((b) => b.toString(16).padStart(2, '0')).join('');
+}
 const FN_URL = `${Deno.env.get('SUPABASE_URL')}/functions/v1/digest`;
 const admin = createClient(Deno.env.get('SUPABASE_URL')!, SERVICE_KEY);
 
@@ -368,8 +374,7 @@ Deno.serve(async (req) => {
       return Response.redirect(`${APP}/#/unsubscribed${ok ? '' : '/bad'}`, 302);
     }
     const bearer = (req.headers.get('Authorization') ?? '').replace('Bearer ', '');
-    const callKey = Deno.env.get('DIGEST_KEY'); // set by the Sunday email GitHub Action on each run
-    if (req.method !== 'POST' || !bearer || (bearer !== SERVICE_KEY && bearer !== callKey)) return new Response('Not allowed', { status: 401 });
+    if (req.method !== 'POST' || !bearer || (bearer !== SERVICE_KEY && await sha256(bearer) !== CALL_KEY_SHA256)) return new Response('Not allowed', { status: 401 });
     const body = await req.json().catch(() => ({}));
     const result = body.mode === 'test' ? await runTest(body.as || undefined) : body.mode === 'send' ? await runSend(!!body.force) : { error: 'mode must be send or test' };
     return new Response(JSON.stringify(result, null, 2), { headers: { 'Content-Type': 'application/json' } });

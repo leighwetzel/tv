@@ -21,29 +21,21 @@ jobs:
   email:
     runs-on: ubuntu-latest
     env:
-      SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+      KEY: ${{ secrets.DIGEST_KEY }}
       REF: iozcageqqmoykdjizgob
     steps:
-      - uses: supabase/setup-cli@v1
-        with:
-          version: latest
       - name: Call the digest function
         run: |
-          # A fresh key each run: saved as the function's DIGEST_KEY secret, then used to call it.
-          KEY=$(openssl rand -hex 24)
-          echo "::add-mask::$KEY"
-          supabase secrets set DIGEST_KEY="$KEY" --project-ref "$REF" --yes
+          [ -n "$KEY" ] || { echo "Add the DIGEST_KEY secret: Settings > Secrets and variables > Actions."; exit 1; }
           MODE="${{ github.event.inputs.mode || 'send' }}"
           FORCE=false
           [ "${{ github.event_name }}" = "workflow_dispatch" ] && [ "$MODE" = "send" ] && FORCE=true
           BODY=$(jq -nc --arg mode "$MODE" --arg as "${{ github.event.inputs.as }}" --argjson force $FORCE '{mode:$mode, as:$as, force:$force}')
-          # The function picks up the new secret within a few seconds; retry until it does.
-          for i in 1 2 3 4 5 6; do
-            sleep 10
+          for i in 1 2 3; do
             CODE=$(curl -sS -o out.json -w '%{http_code}' -X POST "https://$REF.supabase.co/functions/v1/digest" \
               -H "Authorization: Bearer $KEY" -H "Content-Type: application/json" -d "$BODY")
-            [ "$CODE" != "401" ] && break
-            echo "Waiting for the new key ($i)…"
+            [ "$CODE" -lt 500 ] && break
+            sleep 15
           done
           cat out.json; echo
           [ "$CODE" = "200" ] && ! grep -q '"error"' out.json
