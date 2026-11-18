@@ -85,6 +85,19 @@ label { font-size: calc(var(--base) - 3px); color: var(--muted); font-weight: 60
 .note.clamp { display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; }
 [hidden] { display: none !important; }
 .me-head { display: flex; gap: 16px; align-items: center; }
+/* Me: collapsed rows with an icon, label, short summary and a chevron (Nov 18). */
+.me { display: flex; flex-direction: column; gap: 16px; }
+.me-list > details { padding: 0; }
+.list.me-list > details > summary, .list.me-list > .me-link { list-style: none; cursor: pointer; display: flex; align-items: center; gap: 14px; min-height: 56px; padding: 8px 14px; color: var(--ink); text-decoration: none; font-weight: 400; }
+.me-list summary::-webkit-details-marker { display: none; }
+.me-list summary::after { content: '›'; color: var(--muted); font-weight: 400; transition: transform .2s; }
+.me-list details[open] > summary::after { transform: rotate(90deg); }
+.me-ic { flex: none; color: var(--accent); }
+.me-label { flex: 1; min-width: 0; }
+.me-sum { font-size: calc(var(--base) - 2px); }
+.me-body { padding: 4px 14px 16px; display: flex; flex-direction: column; gap: 12px; }
+.me-body .list { border-radius: var(--r-input); }
+@media (prefers-reduced-motion: reduce) { .me-list summary::after { transition: none; } }
 .avatar.lg { width: 88px; height: 88px; font-size: calc(var(--base) + 10px); margin: 0; }
 .photo-actions { gap: 12px; margin-top: 6px; align-items: center; }
 .cropper { position: fixed; inset: 0; background: rgba(0, 0, 0, .55); z-index: 30; display: flex; align-items: center; justify-content: center; padding: 16px; }

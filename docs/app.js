@@ -1118,75 +1118,122 @@ actions.watched = async (d) => {
 
 // ---------------------------------------------------------------- me
 
+// Me: draws at once from what's already loaded, then fills in counts as they arrive. Each section is a
+// collapsed row (like Google Home's account sheet, Nov 18); tap to open.
+const ICON = (d) => `<svg class="me-ic" aria-hidden="true" viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">${d}</svg>`;
+const ME_ICONS = {
+  profile: ICON('<path d="M4 20h4L19 9l-4-4L4 16z"/><path d="M13 7l4 4"/>'),
+  picks: ICON('<path d="M12 3l2.7 5.6 6.1.9-4.4 4.3 1 6.1L12 17l-5.4 2.9 1-6.1-4.4-4.3 6.1-.9z"/>'),
+  services: ICON('<rect x="3" y="5" width="18" height="12" rx="2"/><path d="M8 21h8M12 17v4"/>'),
+  invite: ICON('<circle cx="9" cy="8" r="4"/><path d="M2 21c1.2-3.6 3.8-5.5 7-5.5s5.8 1.9 7 5.5M19 8v6M16 11h6"/>'),
+  following: ICON('<circle cx="9" cy="8" r="3.5"/><path d="M2.5 20c1-3.3 3.4-5 6.5-5s5.5 1.7 6.5 5"/><circle cx="17" cy="9" r="2.8"/><path d="M17.5 14.5c2.2.3 3.6 1.9 4.2 4.5"/>'),
+  face: ICON('<path d="M4 8V6a2 2 0 0 1 2-2h2M16 4h2a2 2 0 0 1 2 2v2M20 16v2a2 2 0 0 1-2 2h-2M8 20H6a2 2 0 0 1-2-2v-2"/><path d="M9 9.5v1M15 9.5v1M12 9.5V13h-1M9.5 15.5c1.5 1.2 3.5 1.2 5 0"/>'),
+  email: ICON('<rect x="3" y="5" width="18" height="14" rx="2"/><path d="M3 7l9 6 9-6"/>'),
+  help: ICON('<circle cx="12" cy="12" r="9"/><path d="M9.5 9.5a2.5 2.5 0 1 1 3.5 2.3c-.6.3-1 .9-1 1.6v.4M12 17h.01"/>'),
+  about: ICON('<circle cx="12" cy="12" r="9"/><path d="M12 11v6M12 7.5h.01"/>'),
+  requests: ICON('<path d="M4 13l2.5-7h11L20 13v5a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1z"/><path d="M4 13h5l1 2h4l1-2h5"/>'),
+  feedback: ICON('<path d="M4 5h16v11H9l-5 4z"/><path d="M12 8v3M12 13.5h.01"/>'),
+};
+const meRow = (id, icon, label, body, extra = '') => `<details id="${id}"${extra}><summary>${ME_ICONS[icon]}<span class="me-label">${label}</span><span class="muted me-sum" id="${id}Sum"></span></summary><div class="me-body" id="${id}Body">${body}</div></details>`;
+let meDraw = 0;
 async function viewMe() {
-  await loadPeople();
-  if (!state.services) state.services = (await fn('services')).services;
-  const [{ count: nRatings }, { data: myRecent }, { error: invitesClosed }, { data: keys, error: keysErr }, { data: reqs, error: reqsErr }, { data: inbox }] = await Promise.all([
+  const draw = ++meDraw;
+  const live = () => draw === meDraw && document.getElementById('meRoot');
+  const set = (id, html) => { const el = document.getElementById(id); if (el) el.innerHTML = html; };
+  $app.innerHTML = `<div id="meRoot" class="me">
+    <div class="me-head">${avatar(state.me.id).replace('class="avatar"', 'class="avatar lg" id="myAvatar"')}
+      <div><h1>${esc(state.me.name)}</h1><span class="muted" id="meCount">&nbsp;</span></div></div>
+    <div class="list me-list" id="meAdmin" hidden></div>
+    <div class="list me-list">
+      ${meRow('meProfile', 'profile', 'Name and photo', `
+        <div class="field"><label for="myName">Your name, as others see it</label>
+          <div class="row" style="flex-wrap:nowrap"><input id="myName" style="flex:1;min-width:0" value="${esc(state.me.name)}" autocomplete="given-name">
+          <button class="primary" data-act="saveName">Save</button></div></div>
+        <div class="row photo-actions">
+          <label class="btn small-btn" for="photoInput">${state.me.avatar_url ? 'Change photo' : 'Add photo'}</label>
+          <input type="file" id="photoInput" accept="image/*" hidden>
+          ${state.me.avatar_url ? '<button class="link small" data-act="removePhoto">Remove photo</button>' : ''}
+        </div>`)}
+      <a class="item me-link" href="#/friend/${state.me.id}">${ME_ICONS.picks}<span class="me-label">My picks</span><span class="muted me-sum" id="mePicksSum"></span><span class="muted">›</span></a>
+      ${meRow('meSvc', 'services', 'My services', `<p class="muted">Used for the My services filter and highlights.</p><div class="row" id="svc">${state.services ? serviceChips('toggleMySvc') : '<span class="muted">Loading…</span>'}</div>`)}
+      ${meRow('meInv', 'invite', 'Invites', `<button class="primary big" data-act="invite">Invite someone</button><div id="inviteBox"></div><div id="meInvLink"></div>`, ' hidden')}
+      ${state.followsReady ? `<a class="item me-link" href="#/following">${ME_ICONS.following}<span class="me-label">Following</span><span class="muted me-sum">${state.following.size} ${state.following.size === 1 ? 'person' : 'people'}</span><span class="muted">›</span></a>` : ''}
+      <div class="item me-link" id="meFace" hidden></div>
+      <div class="item me-link">${ME_ICONS.email}<span class="me-label">Weekly email <span class="muted">(Sundays)</span></span><button class="chip ${state.me.weekly_email ? 'on' : ''}" data-act="toggleEmail">${state.me.weekly_email ? 'On' : 'Off'}</button></div>
+    </div>
+    <div class="list me-list">
+      <a class="item me-link" href="#/help">${ME_ICONS.help}<span class="me-label">Help</span><span class="muted">›</span></a>
+      <a class="item me-link" href="#/about">${ME_ICONS.about}<span class="me-label">About and credits</span><span class="muted">›</span></a>
+    </div>
+    <div class="list">
+      <button class="link" data-act="signOut">Sign out</button>
+      <button class="link danger" data-act="deleteAccount">Delete my account</button>
+    </div>
+    ${FOOTER}</div>`;
+  const svcSummary = () => { const n = state.services?.filter((s) => s.ids.some((i) => myServices().includes(i))).length ?? 0; return n ? `${n} chosen` : 'None chosen'; };
+  if (state.services) set('meSvcSum', svcSummary());
+
+  // Everything at once, so the slowest request sets the wait instead of the sum of them.
+  const [svcs, { count: nRatings }, { error: invitesClosed }, { data: keys, error: keysErr }, { data: reqs, error: reqsErr }, { data: inbox }, { data: fbs }, myInvites] = await Promise.all([
+    state.services ? null : fn('services').then((r) => r.services).catch((e) => { console.error('services', e); return null; }),
     sb.from('ratings').select('title_id', { count: 'exact', head: true }).eq('user_id', state.me.id),
-    sb.from('ratings').select('rating, title_id, titles(id, name, media_type, poster_path)').eq('user_id', state.me.id).order('activity_at', { ascending: false }).limit(SHELF_MAX + 1),
     sb.rpc('my_open_invites'), // missing until migration 006: then only hosts invite
     canPasskey() ? sb.auth.passkey.list() : Promise.resolve({ error: true }),
     // Invite requests: only the person in request_inbox gets rows back (migration 007); everyone else gets none.
     sb.from('invite_requests').select('id, name, email, knows, created_at').is('handled', null).order('created_at', { ascending: false }).limit(50),
     sb.rpc('gets_invite_requests'), // true only for you, so the section (and any error) shows only to you
+    sb.from('feedback').select('*').is('resolved_at', null).order('created_at', { ascending: false }).limit(50), // only you get rows
+    loadMyInvites(),
   ]);
-  const { data: fbs } = await sb.from('feedback').select('*').is('resolved_at', null).order('created_at', { ascending: false }).limit(50); // only you get rows
-  const myInvites = await loadMyInvites();
+  if (svcs) state.services = svcs;
+  if (!live()) return;
   if (reqsErr) console.error('invite_requests', reqsErr);
-  const faceOn = !keysErr && Array.isArray(keys) && keys.length > 0;
-  const canInvite = invitesClosed ? state.me.is_host : true;
-  $app.innerHTML = `
-    <div class="me-head">${avatar(state.me.id).replace('class="avatar"', 'class="avatar lg" id="myAvatar"')}
-      <div><h1>${esc(state.me.name)}</h1><span class="muted">${nRatings ?? 0} rating${nRatings === 1 ? '' : 's'}</span>
-        <div class="row photo-actions">
-          <label class="btn small-btn" for="photoInput">${state.me.avatar_url ? 'Change photo' : 'Add photo'}</label>
-          <input type="file" id="photoInput" accept="image/*" hidden>
-          ${state.me.avatar_url ? '<button class="link small" data-act="removePhoto">Remove</button>' : ''}
-        </div></div></div>
-    <div class="field"><label for="myName">Your name, as others see it</label>
-      <div class="row" style="flex-wrap:nowrap"><input id="myName" style="flex:1;min-width:0" value="${esc(state.me.name)}" autocomplete="given-name">
-      <button class="primary" data-act="saveName">Save</button></div></div>
-    ${inbox && !reqs?.length ? `<section class="requests"><h2>Invite requests</h2>
-      <p class="muted">${reqsErr ? `Couldn’t load requests: ${esc(reqsErr.message)} (${esc(reqsErr.code ?? '')})` : 'No new requests.'}</p></section>` : ''}
-    ${reqs?.length ? `<section class="requests"><h2>Invite requests <span class="pill">${reqs.length} new</span></h2>
-      <div class="list">${reqs.map((r) => `<div class="req" id="req${r.id}">
+
+  set('meCount', `${nRatings ?? 0} rating${nRatings === 1 ? '' : 's'}`);
+  set('mePicksSum', nRatings ? String(nRatings) : '');
+  if (state.services) { set('svc', serviceChips('toggleMySvc')); set('meSvcSum', svcSummary()); }
+
+  if (invitesClosed ? state.me.is_host : true) {
+    document.getElementById('meInv').hidden = false;
+    if (myInvites.length) {
+      set('meInvSum', inviteCounts(myInvites));
+      set('meInvLink', `<a class="btn big" href="#/invites">See my invites</a>`);
+    }
+  }
+  if (!keysErr) {
+    const on = Array.isArray(keys) && keys.length > 0, face = document.getElementById('meFace');
+    face.innerHTML = `${ME_ICONS.face}<span class="me-label">Sign in with ${bioName()}</span>${on ? '<span class="muted me-sum">On</span>' : '<button data-act="addPasskey">Turn on</button>'}`;
+    face.hidden = false;
+  }
+
+  const admin = [];
+  if (reqs?.length || inbox) admin.push(meRow('meReq', 'requests', 'Invite requests', reqs?.length
+    ? `<div class="list">${reqs.map((r) => `<div class="req" id="req${r.id}">
         <strong>${esc(r.name)}</strong>
         <span class="muted">Knows: ${esc(r.knows) || '(left blank)'}</span>
         <span class="muted small">${esc(r.email)} · ${when(r.created_at)}</span>
         <div class="row"><button class="primary" data-act="inviteRequest" data-id="${r.id}" data-email="${esc(r.email)}" data-name="${esc(r.name)}">Email invite</button>
-          <button data-act="skipRequest" data-id="${r.id}">Not now</button></div></div>`).join('')}</div></section>` : ''}
-    ${fbs?.length ? `<section class="requests"><h2>Feedback <span class="pill">${fbs.length} open</span></h2>
-      <div class="list">${fbs.map((f) => `<div class="req" id="fb${f.id}">
+          <button data-act="skipRequest" data-id="${r.id}">Not now</button></div></div>`).join('')}</div>`
+    : `<p class="muted">${reqsErr ? `Couldn’t load requests: ${esc(reqsErr.message)} (${esc(reqsErr.code ?? '')})` : 'No new requests.'}</p>`, ' class="me-req"'));
+  if (fbs?.length) admin.push(meRow('meFb', 'feedback', 'Feedback', `<div class="list">${fbs.map((f) => `<div class="req" id="fb${f.id}">
         <span><strong>${f.kind === 'bug' ? 'Bug' : 'Suggestion'}</strong> · ${FB_APPS[f.app]}</span>
         <div class="note">${esc(f.message)}</div>
         <span class="muted small">${f.user_id ? personLink(f.user_id) : esc(f.name)} · ${when(f.created_at)}</span>
-        <div class="row"><button data-act="resolveFeedback" data-id="${f.id}">Resolve</button></div></div>`).join('')}</div></section>` : ''}
-    <h2>My services</h2>
-    <p class="muted">Used for the My services filter and highlights.</p>
-    <div class="row" id="svc">${serviceChips('toggleMySvc')}</div>
-    ${canInvite ? '<div class="spread"><h2>Invite</h2><button class="primary" data-act="invite">Invite someone</button></div>' : ''}
-    <div id="inviteBox"></div>
-    ${myInvites.length ? `<div class="list"><a class="item" href="#/invites"><span><strong>My invites</strong> <span class="muted">· ${inviteCounts(myInvites)}</span></span><span class="muted">›</span></a></div>` : ''}
-    ${keysErr ? '' : `<div class="list"><div class="item"><span><strong>Sign in with ${bioName()}</strong> <span class="muted">· ${faceOn ? 'On' : 'Off'}</span></span>
-      ${faceOn ? '' : `<button data-act="addPasskey">Turn on</button>`}</div></div>`}
-    ${state.followsReady ? `<div class="list"><a class="item" href="#/following"><span><strong>Following</strong> <span class="muted">· ${state.following.size} ${state.following.size === 1 ? 'person' : 'people'}</span></span><span class="muted">›</span></a></div>` : ''}
-    <div class="spread shelf-head"><h2>My picks</h2><a class="small" href="#/friend/${state.me.id}">See all</a></div>
-    ${myRecent?.length ? shelf(myRecent, `#/friend/${state.me.id}/all`)
-      : '<p class="muted">Nothing rated yet. Tap Search to find and rate a show.</p>'}
-    <div class="list">
-      <div class="spread"><span>Weekly email (Sundays)</span><button class="chip ${state.me.weekly_email ? 'on' : ''}" data-act="toggleEmail">${state.me.weekly_email ? 'On' : 'Off'}</button></div>
-      <a class="item" href="#/help"><span>Help</span><span class="muted">›</span></a>
-      <a class="item" href="#/about"><span>About and credits</span><span class="muted">›</span></a>
-      <button class="link" data-act="signOut">Sign out</button>
-      <button class="link danger" data-act="deleteAccount">Delete my account</button>
-    </div>
-    ${FOOTER}`;
+        <div class="row"><button data-act="resolveFeedback" data-id="${f.id}">Resolve</button></div></div>`).join('')}</div>`));
+  if (admin.length) {
+    const box = document.getElementById('meAdmin');
+    box.innerHTML = admin.join(''); box.hidden = false;
+    if (reqs?.length) set('meReqSum', `<span class="pill">${reqs.length} new</span>`);
+    if (fbs?.length) set('meFbSum', `<span class="pill">${fbs.length} open</span>`);
+  }
 }
 actions.toggleMySvc = async (d, el) => {
   actions.toggleSvc(d, el);
   const services = chosenServiceIds();
   await sb.from('profiles').update({ services }).eq('id', state.me.id);
   state.me.services = services;
+  const sum = document.getElementById('meSvcSum');
+  if (sum) sum.textContent = services.length ? `${state.services.filter((s) => s.ids.some((i) => services.includes(i))).length} chosen` : 'None chosen';
 };
 actions.toggleEmail = async (d, el) => {
   state.me.weekly_email = !state.me.weekly_email;
@@ -1339,9 +1386,10 @@ actions.skipRequest = async (d, el) => {
 };
 function doneRequest(id, msg) {
   document.getElementById(`req${id}`)?.remove();
-  const left = document.querySelectorAll('.requests .req').length;
-  const pill = document.querySelector('.requests .pill');
-  if (!left) document.querySelector('.requests')?.remove(); else if (pill) pill.textContent = `${left} new`;
+  const left = document.querySelectorAll('.me-req .req').length;
+  const pill = document.querySelector('#meReqSum .pill');
+  if (!left) { document.querySelector('.me-req')?.remove(); const box = document.getElementById('meAdmin'); if (box && !box.children.length) box.hidden = true; }
+  else if (pill) pill.textContent = `${left} new`;
   toast(msg);
   updateActivityDot();
 }
