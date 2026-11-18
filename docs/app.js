@@ -239,14 +239,14 @@ async function route() {
     history.replaceState(null, '', location.pathname);
     toast('That sign-in link expired. Use the code instead.');
   }
-  // From the Sunday email's Stop these emails link. Works signed in or out.
+  // From the Sunday email's Unsubscribe link. Works signed in or out.
   // Asks first: some email systems open every link to scan it, and that visit alone mustn't turn the email off.
   if (location.hash.startsWith('#/unsubscribe/')) {
     $nav.hidden = true;
     const [, , u, t] = location.hash.split('/');
-    $app.innerHTML = `<section><h1>Stop the Sunday email?</h1>
+    $app.innerHTML = `<section><h1>Unsubscribe from the Sunday email?</h1>
       <p>You’ll stop getting picks from TV Rex by email. You can turn it back on anytime on your Me page.</p>
-      <p><button class="primary big" data-act="unsubscribe" data-u="${esc(u)}" data-t="${esc(t)}">Turn off the Sunday email</button></p>
+      <p><button class="primary big" data-act="unsubscribe" data-u="${esc(u)}" data-t="${esc(t)}">Unsubscribe</button></p>
       <p><a href="#/feed">Keep getting it</a></p></section>`;
     return;
   }
@@ -1328,7 +1328,7 @@ actions.unsubscribe = async (d, el) => {
   if (state.me && res?.ok) state.me.weekly_email = false;
   history.replaceState(null, '', '#/feed');
   $app.innerHTML = res?.ok
-    ? `<section><h1>Sunday email off</h1><p>You won’t get the Sunday email anymore. To turn it back on, go to your Me page and set <b>Weekly email</b> to <b>On</b>.</p><p><a class="btn primary big" href="#/feed">Open TV Rex</a></p></section>`
+    ? `<section><h1>You’re unsubscribed</h1><p>You won’t get the Sunday email anymore. To turn it back on, go to your Me page and set <b>Weekly email</b> to <b>On</b>.</p><p><a class="btn primary big" href="#/feed">Open TV Rex</a></p></section>`
     : `<section><h1>That didn’t work</h1><p>Turn the Sunday email off on your Me page instead: <b>Weekly email</b>, then <b>Off</b>.</p><p><a class="btn primary big" href="#/feed">Open TV Rex</a></p></section>`;
 };
 actions.signOut = async () => {
