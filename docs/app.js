@@ -912,15 +912,29 @@ async function ensureTitle(id) {
   await sb.from('titles').insert(t);
   return t;
 }
+// One row of the Search page's "What you can do here" card.
+const introRow = (paths, head, detail) => `<div class="intro-row">
+  <span class="intro-icon"><svg aria-hidden="true" viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">${paths}</svg></span>
+  <span><strong>${head}</strong><br><span class="muted">${detail}</span></span></div>`;
 async function viewAdd() {
   $app.innerHTML = `
     <h1>Search</h1>
-    <div class="field"><label for="q">Find a show or movie</label>
+    <div class="field"><label for="q">Search any show or movie</label>
       <input id="q" type="search" autocomplete="off" placeholder="e.g. Slow Horses"></div>
+    <div id="intro">
+      <p class="muted intro-head">What you can do here</p>
+      <div class="list intro">
+        ${introRow('<path d="M12 3l2.7 5.6 6.1.9-4.4 4.3 1 6.1L12 17l-5.4 2.9 1-6.1L3.2 9.5l6.1-.9z"/>', 'Recommend it', 'Rate a show or movie you watched so friends see it.')}
+        ${introRow('<path d="M6 3h12v18l-6-4-6 4z"/><path d="M12 7v6M9 10h6"/>', 'Save it', 'Add it to Want to Watch or Watching.')}
+        ${introRow('<circle cx="9" cy="8" r="3.5"/><path d="M2.5 20c1-3.5 3.5-5 6.5-5s5.5 1.5 6.5 5"/><circle cx="17" cy="9" r="2.5"/><path d="M17 14c2.3 0 4 1.3 4.6 4"/>', 'Look it up', 'See what friends thought of it.')}
+      </div>
+    </div>
     <div id="results"></div>`;
   const q = document.getElementById('q');
   q.focus();
   q.oninput = () => {
+    // The explainer is for an empty box; it steps aside once you start searching.
+    document.getElementById('intro').hidden = q.value.trim().length >= 2;
     clearTimeout(searchTimer);
     searchTimer = setTimeout(async () => {
       const asked = q.value;
