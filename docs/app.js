@@ -819,6 +819,7 @@ async function viewTitle(id, act) {
     <div class="pick">${poster(t.poster_path, 'lg')}
       <div class="pick-body"><h1>${esc(t.name)}</h1><span class="muted">${kind(t)}</span>
         ${mine ? '' : listButtons}
+        ${onList && !mine ? `<button class="link small remove" data-act="removeFromList" data-id="${esc(id)}" data-name="${esc(t.name)}">Remove from list</button>` : ''}
       </div></div>
     ${mine ? '' : `<button class="primary big" id="writeReview" data-act="openReview">Write review</button>
       <div id="newReview" hidden>${ratingForm(null, id)}</div>`}
