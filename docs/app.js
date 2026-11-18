@@ -463,8 +463,7 @@ async function viewInvite() {
         <p class="muted">Ask ${name ? esc(name) : 'the person who invited you'} for a new link, or request one.</p>
         <a class="btn primary big" href="#/request">Request an invite</a>
       </div>` : `<div class="card invite-card">
-        <div class="inviter">${name ? avatar(inv.inviter_id, inv) : ''}${inv.is_host ? '<p class="host-note">I made this app to share TV recommendations with friends.</p>'
-          : `<h2>${name ? `${esc(name)} invited you` : 'You’re invited to TV Rex'}</h2>`}</div>
+        <div class="inviter">${name ? avatar(inv.inviter_id, inv) : ''}<h2>${name ? `${esc(name)} invited you` : 'You’re invited to TV Rex'}</h2></div>
         <a class="btn primary big" href="#/signin">Join TV Rex</a>
       </div>`}
     <h2>What you get</h2>
@@ -1367,7 +1366,9 @@ function doneRequest(id, msg) {
 actions.shareInvite = async () => {
   const url = document.getElementById('inviteUrl').value;
   // The phone or computer's share menu where there is one; otherwise copy the link.
-  if (navigator.share) await navigator.share({ title: 'Let’s share what we’re watching on TV Rex', text: 'Let’s share what we’re watching on TV Rex:', url }).catch(() => {});
+  // Hosts (Leigh) get a personal line; everyone else gets the general one.
+  const text = state.me.is_host ? 'I made this app to share TV recommendations with friends:' : 'Let’s share what we’re watching on TV Rex:';
+  if (navigator.share) await navigator.share({ title: text.slice(0, -1), text, url }).catch(() => {});
   else await actions.copyInvite();
 };
 actions.copyInvite = async () => { await navigator.clipboard.writeText(document.getElementById('inviteUrl').value); toast('Link copied'); };

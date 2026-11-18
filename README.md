@@ -8,7 +8,7 @@ A private friends-and-family app for TV and movie recommendations, at tv.xoleigh
 
 ## Setup
 
-1. Supabase > SQL Editor: run every file in `supabase/migrations/`, in number order (001 to 020).
+1. Supabase > SQL Editor: run every file in `supabase/migrations/`, in number order (001 to 019).
 2. Supabase > Edge Functions secrets: `TMDB_TOKEN` (TMDB read access token) and `RESEND_API_KEY` (Resend, sending access).
    The functions deploy themselves from GitHub (`.github/workflows/deploy-functions.yml`, needs the `SUPABASE_ACCESS_TOKEN` Actions secret).
 3. Supabase > Authentication: custom SMTP through Resend (sender `TV Rex <tv@xoleigh.com>`), sign-in email templates with `{{ .Token }}`, Site URL `https://tv.xoleigh.com`.
