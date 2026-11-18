@@ -189,6 +189,32 @@ Deno.serve(async (req) => {
         const d = await tmdb(`/tv/${num}`);
         return json({ seasons: d.number_of_seasons ?? null, status: d.status ?? null, last_air_date: d.last_air_date ?? null });
       }
+      case 'details': {
+        // The show page's description, details line, top cast and trailer (Nov 18).
+        const id = String(body.id ?? '');
+        if (!/^(tv|movie):\d+$/.test(id)) return json({ error: 'Bad id' }, 400);
+        const [type, num] = id.split(':');
+        const d = await tmdb(`/${type}/${num}`, {
+          append_to_response: type === 'tv' ? 'aggregate_credits,videos,content_ratings' : 'credits,videos,release_dates',
+        });
+        const rating = type === 'tv'
+          ? d.content_ratings?.results?.find((r: any) => r.iso_3166_1 === REGION)?.rating
+          : d.release_dates?.results?.find((r: any) => r.iso_3166_1 === REGION)?.release_dates?.map((x: any) => x.certification).find(Boolean);
+        const cast = [...((type === 'tv' ? d.aggregate_credits?.cast : d.credits?.cast) ?? [])]
+          .sort((a: any, b: any) => (a.order ?? 999) - (b.order ?? 999)).slice(0, 4).map((c: any) => c.name);
+        const vids = (d.videos?.results ?? []).filter((v: any) => v.site === 'YouTube');
+        const vid = vids.find((v: any) => v.type === 'Trailer' && v.official) ?? vids.find((v: any) => v.type === 'Trailer') ?? vids.find((v: any) => v.type === 'Teaser');
+        return json({
+          overview: d.overview || null,
+          genres: (d.genres ?? []).slice(0, 2).map((g: any) => g.name),
+          rating: rating || null,
+          runtime: d.runtime || null,
+          seasons: d.number_of_seasons ?? null,
+          status: d.status ?? null,
+          cast,
+          trailer: vid ? `https://www.youtube.com/watch?v=${vid.key}` : null,
+        });
+      }
       case 'services':
         return json({ services: await services() });
       default:

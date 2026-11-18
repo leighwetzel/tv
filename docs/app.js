@@ -808,8 +808,8 @@ async function viewTitle(id, act) {
   if (!t) { $app.innerHTML = '<p class="empty">Title not found.</p>'; return; }
   const onList = wl && !wl.watched_at;
   const listButtons = onList && wl.started_at ? WATCHING
-    : `<div class="row">${onList ? SAVED : `<button class="primary" data-act="save" data-id="${esc(id)}">+ Want to watch</button>`}
-       <button data-act="watchNow" data-id="${esc(id)}">Watching</button></div>`;
+    : `${onList ? SAVED : `<button data-act="save" data-id="${esc(id)}">+ Want to watch</button>`}
+       <button data-act="watchNow" data-id="${esc(id)}">Watching</button>`;
   await loadProviders([id]);
   const p = state.providers.get(id) ?? {};
   const mine = (rs ?? []).find((r) => isMe(r.user_id));
@@ -817,12 +817,14 @@ async function viewTitle(id, act) {
   $app.innerHTML = `
     <a href="javascript:history.back()">← Back</a>
     <div class="pick">${poster(t.poster_path, 'lg')}
-      <div class="pick-body"><h1>${esc(t.name)}</h1><span class="muted">${kind(t)}</span>
-        ${mine ? '' : listButtons}
-        ${onList && !mine ? `<button class="link small remove" data-act="removeFromList" data-id="${esc(id)}" data-name="${esc(t.name)}">Remove from list</button>` : ''}
+      <div class="pick-body"><h1>${esc(t.name)}</h1><span class="muted" id="facts1">${kind(t)}</span>
+        <span class="muted" id="facts2"></span><span id="trailer"></span>
       </div></div>
+    <div id="about"></div>
     ${mine ? '' : `<button class="primary big" id="writeReview" data-act="openReview">Write review</button>
-      <div id="newReview" hidden>${ratingForm(null, id)}</div>`}
+      <div id="newReview" hidden>${ratingForm(null, id)}</div>
+      <div class="row actions">${listButtons}</div>
+      ${onList ? `<button class="link small remove" data-act="removeFromList" data-id="${esc(id)}" data-name="${esc(t.name)}">Remove from list</button>` : ''}`}
     <section class="card watchbox">
       <div class="muted small">WATCH ON</div>
       ${subs(id).length ? `<div class="row">${subs(id).map((s) => `<span class="chip ${isMine(s) ? 'on' : ''}" style="display:inline-flex;align-items:center">${esc(s.name)}</span>`).join('')}</div>` : '<p>Not on a subscription service in the US right now.</p>'}
@@ -843,6 +845,29 @@ async function viewTitle(id, act) {
     <h2>Reviews</h2>
     ${tally(rs ?? [])}
     ${others.length ? `<div class="list">${others.map((r) => reviewHtml(r)).join('')}</div>` : '<p class="muted">No one else has rated this yet.</p>'}`;
+  fillDetails(t); // description, cast and trailer arrive a moment after the page draws
+}
+// TMDB extras for a show page: "2022 · Drama, Crime · TV-MA", "5 seasons · Still running", description, cast, trailer.
+const detailsCache = new Map();
+const STATUS = { 'Returning Series': 'Still running', 'In Production': 'Still running', Ended: 'Ended', Canceled: 'Canceled', Planned: 'Coming soon' };
+async function fillDetails(t) {
+  let d = detailsCache.get(t.id);
+  if (!d) {
+    try { d = await fn('details', { id: t.id }); } catch { return; }
+    detailsCache.set(t.id, d);
+  }
+  const f1 = document.getElementById('facts1');
+  if (!f1 || !location.hash.includes(encodeURIComponent(t.id))) return; // moved on to another page
+  f1.textContent = [t.year, d.genres.join(', '), d.rating].filter(Boolean).join(' · ') || kind(t);
+  const runtime = d.runtime ? (d.runtime >= 60 ? `${Math.floor(d.runtime / 60)}h ${d.runtime % 60}m` : `${d.runtime}m`) : '';
+  document.getElementById('facts2').textContent = t.media_type === 'tv'
+    ? [d.seasons ? `${d.seasons} season${d.seasons === 1 ? '' : 's'}` : '', STATUS[d.status] ?? ''].filter(Boolean).join(' · ')
+    : runtime;
+  if (d.trailer) document.getElementById('trailer').innerHTML = `<a class="trailer" href="${esc(d.trailer)}" target="_blank" rel="noopener">
+    <svg aria-hidden="true" viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M10 8.5v7l5.5-3.5z"/></svg>Watch trailer</a>`;
+  document.getElementById('about').innerHTML = (d.overview ? `<div class="note clamp">${esc(d.overview)}</div><button class="link small readmore" data-act="readMore" hidden>Read more</button>` : '')
+    + (d.cast.length ? `<p class="cast"><span class="muted">Starring</span> ${esc(d.cast.join(', '))}</p>` : '');
+  markLongNotes();
 }
 
 function ratingForm(mine, titleId, saveLabel = 'Save review') {

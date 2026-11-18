@@ -130,7 +130,13 @@ a.more { align-self: flex-start; min-height: 44px; display: inline-flex; align-i
 .actions button.primary, .actions .saved { flex-grow: 2; }
 .btn.saved { background: var(--soft); border-color: var(--soft); color: var(--muted); cursor: default; white-space: nowrap; padding: 0 14px; }
 .actions a { min-height: 44px; display: inline-flex; align-items: center; }
-.pick-card .remove, .pick-body .remove { align-self: flex-start; color: var(--muted); margin-top: 4px; }
+.remove { align-self: flex-start; color: var(--muted); margin-top: 4px; }
+/* Show page extras from TMDB (Nov 18). */
+#about { display: flex; flex-direction: column; gap: 6px; }
+#about:empty { display: none; }
+.cast { font-size: calc(var(--base) - 1px); }
+.cast .muted { font-size: inherit; }
+.trailer { align-self: flex-start; min-height: 44px; display: inline-flex; align-items: center; gap: 6px; text-decoration: none; font-size: calc(var(--base) - 1px); }
 .list { background: var(--card); border: 1px solid var(--line); border-radius: var(--r-card); overflow: hidden; }
 .list > * { padding: 12px 14px; border-top: 1px solid var(--line); margin-top: 0; }
 .list > *:first-child { border-top: 0; }
