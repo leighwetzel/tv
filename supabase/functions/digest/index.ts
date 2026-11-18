@@ -218,7 +218,7 @@ function card(p: Pick, names: Map<string, any>, services: string[], follows: Set
         ${tags}
       </td></tr>
       ${reviews}
-      <tr><td style="padding-top:14px" colspan="2">${button(`${APP}/#/title/${encodeURIComponent(t.id)}/save`, 'Want to watch')}</td></tr>
+      <tr><td style="padding-top:14px" colspan="2">${button(`${APP}/#/title/${encodeURIComponent(t.id)}/save`, '+ Want to watch', false)}</td></tr>
     </table>
   </td></tr></table></td></tr>`;
 }
@@ -261,7 +261,7 @@ async function buildEmail(person: any, picks: Awaited<ReturnType<typeof picksFor
     ${first ? `Hi ${esc(first)},<br>` : ''}${esc(lead)}
   </td></tr>
   ${n ? heading('From people you follow') + picks.fromFollowed.map((p) => card(p, names, services.get(p.title.id) ?? [], picks.follows)).join('') : ''}
-  ${picks.more ? `<tr><td style="padding:0 12px">${button(`${APP}/#/feed`, `See ${picks.more} more in TV Rex`, false)}</td></tr>` : ''}
+  ${picks.more ? `<tr><td align="center" style="padding:8px 16px 0;font-family:${FONT};font-size:17px"><a href="${APP}/#/feed" style="color:${C.blue};font-weight:600;text-decoration:none">See ${picks.more} more in TV Rex ›</a></td></tr>` : ''}
   ${picks.popular.length ? heading('Popular on TV Rex', "From people you don't follow yet") + picks.popular.map((p) => card(p, names, services.get(p.title.id) ?? [], picks.follows)).join('') : ''}
   <tr><td style="padding:16px 12px 0">${button(APP, 'Open TV Rex')}</td></tr>
   <tr><td style="padding:20px 16px 0;font-family:${FONT};font-size:20px;line-height:1.4;color:${C.ink}">
