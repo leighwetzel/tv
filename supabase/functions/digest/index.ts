@@ -259,18 +259,17 @@ async function buildEmail(person: any, picks: Awaited<ReturnType<typeof picksFor
   const html = `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="color-scheme" content="light only"><title>${esc(subject)}</title></head>
 <body style="margin:0;padding:0;background:${C.page}">
 <div style="display:none;max-height:0;overflow:hidden">${esc(preheader)}</div>
-<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:${C.page}"><tr><td align="center">
-<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="max-width:560px">
-  <tr><td style="background:${C.card};border-bottom:1px solid ${C.line};padding:16px;font-family:${FONT}">
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:${C.card};border-bottom:1px solid ${C.line}"><tr><td align="center" style="padding:16px 0">
+  <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="max-width:560px"><tr><td style="padding:0 16px;font-family:${FONT}">
     <a href="${esc(link('', 'header'))}" style="text-decoration:none"><table role="presentation" cellpadding="0" cellspacing="0"><tr>
       <td><img src="${APP}/apple-touch-icon.png" width="44" height="44" alt="" style="display:block;border-radius:10px"></td>
       <td style="padding-left:12px"><div style="font-size:23px;font-weight:700;color:${C.ink}">TV Rex</div><div style="font-size:15px;color:${C.muted}">${esc(longDate())}</div></td>
     </tr></table></a>
-  </td></tr>
-  <tr><td style="padding:20px 16px 0;font-family:${FONT};font-size:20px;line-height:1.4;color:${C.ink}">
-    ${first ? `Hi ${esc(first)},<br>` : ''}${esc(lead)}
-  </td></tr>
-  ${n ? heading('From people you follow') + picks.fromFollowed.map((p) => card(p, names, services.get(p.title.id) ?? [], picks.follows)).join('') : ''}
+  </td></tr></table>
+</td></tr></table>
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:${C.page}"><tr><td align="center">
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="max-width:560px">
+  ${n ? heading(`From people you follow${picks.more ? ` · top ${n} of ${total}` : ''}`) + picks.fromFollowed.map((p) => card(p, names, services.get(p.title.id) ?? [], picks.follows)).join('') : ''}
   ${picks.more ? `<tr><td align="center" style="padding:8px 16px 0;font-family:${FONT};font-size:17px"><a href="${esc(link('/feed', 'see-more'))}" style="color:${C.blue};font-weight:600;text-decoration:none">See ${picks.more} more in TV Rex ›</a></td></tr>` : ''}
   ${picks.popular.length ? heading('Popular on TV Rex', "From people you don't follow yet") + picks.popular.map((p) => card(p, names, services.get(p.title.id) ?? [], picks.follows)).join('') : ''}
   <tr><td style="padding:16px 12px 0">${button(link('', 'open-app'), 'Open TV Rex')}</td></tr>
