@@ -112,13 +112,15 @@ type Pick = { title: any; reviews: Rating[]; followed: boolean; score: number; l
 
 async function loadWorld() {
   const since = new Date(Date.now() - 14 * DAY).toISOString();
-  const [{ data: members }, { data: ratings }, { data: follows }, { data: sends }, users] = await Promise.all([
+  const [{ data: members, error: e1 }, { data: ratings, error: e2 }, { data: follows, error: e3 }, { data: sends, error: e4 }, users] = await Promise.all([
     admin.from('profiles').select('id, name, is_host, weekly_email').eq('is_member', true),
     admin.from('ratings').select('user_id, title_id, rating, note, activity_at').gte('activity_at', since),
     admin.from('follows').select('follower, followee'),
     admin.from('email_sends').select('user_id, sent_at').order('sent_at', { ascending: false }),
     listUsers(),
   ]);
+  const err = e1 ?? e2 ?? e3 ?? e4;
+  if (err) throw new Error(`Database: ${err.message}`);
   const people = new Map((members ?? []).map((m) => [m.id, m]));
   const recent = (ratings ?? []).filter((r) => people.has(r.user_id));
   const titleIds = [...new Set(recent.map((r) => r.title_id))];
