@@ -1397,7 +1397,7 @@ function viewAbout() {
     <a href="#/me">← Back</a>
     <div class="about-head"><img src="icon.png?v=5" alt="" width="72" height="72">
       <div><h1>About TV Rex</h1><p class="muted">TV and movie recommendations by your friends and family</p></div></div>
-    <div class="card about-card"><p>A private place for friends and family to share what they’re watching.</p></div>
+    <div class="card about-card about-version"><span>Version ${new URL(import.meta.url).searchParams.get('v') ?? ''}</span><span class="muted" id="updatedOn"></span></div>
     <div class="about-section"><h2 class="section-label">How it works</h2>
       <div class="list intro">
         ${introRow('<path d="M12 3l2.7 5.6 6.1.9-4.4 4.3 1 6.1L12 17l-5.4 2.9 1-6.1L3.2 9.5l6.1-.9z"/>', 'Rate what you watch', 'Say if you loved it, liked it, didn’t like it or gave up, and add a note if you want.')}
@@ -1411,6 +1411,11 @@ function viewAbout() {
         <p class="muted">This product uses the TMDB API but is not endorsed or certified by TMDB.</p>
         <a class="tmdb-logo" href="https://www.themoviedb.org"><img src="https://www.themoviedb.org/assets/v4/logos/v2/blue_short-8e7b30f73a4020692ccca9c88bafe5dcb6f8a62a4c6bc55cd9ba82bb2cd95f6c.svg" alt="TMDB" height="14"></a>
       </div></div>`;
+  // "Updated Nov 18": the newest release note's date.
+  fetch('./updates.json', { cache: 'no-store' }).then((r) => r.json()).then((u) => {
+    const el = document.getElementById('updatedOn');
+    if (el && u[0]?.date) el.textContent = 'Updated ' + new Date(u[0].date + 'T12:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+  }).catch(() => {});
 }
 
 // ---------------------------------------------------------------- feedback
