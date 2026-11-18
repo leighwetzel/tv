@@ -29,12 +29,21 @@ jobs:
           version: latest
       - name: Call the digest function
         run: |
-          KEY=$(supabase projects api-keys --project-ref "$REF" -o json | jq -r '.[] | select(.name=="service_role") | .api_key')
-          [ -n "$KEY" ] || { echo "Couldn't read the service role key. Check the SUPABASE_ACCESS_TOKEN secret."; exit 1; }
+          # A fresh key each run: saved as the function's DIGEST_KEY secret, then used to call it.
+          KEY=$(openssl rand -hex 24)
           echo "::add-mask::$KEY"
+          supabase secrets set DIGEST_KEY="$KEY" --project-ref "$REF"
           MODE="${{ github.event.inputs.mode || 'send' }}"
           FORCE=false
           [ "${{ github.event_name }}" = "workflow_dispatch" ] && [ "$MODE" = "send" ] && FORCE=true
           BODY=$(jq -nc --arg mode "$MODE" --arg as "${{ github.event.inputs.as }}" --argjson force $FORCE '{mode:$mode, as:$as, force:$force}')
-          curl -sS --fail-with-body -X POST "https://$REF.supabase.co/functions/v1/digest" \
-            -H "Authorization: Bearer $KEY" -H "Content-Type: application/json" -d "$BODY"
+          # The function picks up the new secret within a few seconds; retry until it does.
+          for i in 1 2 3 4 5 6; do
+            sleep 10
+            CODE=$(curl -sS -o out.json -w '%{http_code}' -X POST "https://$REF.supabase.co/functions/v1/digest" \
+              -H "Authorization: Bearer $KEY" -H "Content-Type: application/json" -d "$BODY")
+            [ "$CODE" != "401" ] && break
+            echo "Waiting for the new key ($i)…"
+          done
+          cat out.json; echo
+          [ "$CODE" = "200" ] && ! grep -q '"error"' out.json

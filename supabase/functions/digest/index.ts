@@ -11,7 +11,7 @@
 //                                    once per person per week. {force:true} skips the time check.
 //   POST {mode:"test", as?:"Rick"}   sends the hosts a copy (of their own email, or of Rick's). Logs nothing.
 //   GET/POST ?u=<id>&t=<token>       the email's "Stop these emails" link and the one-click unsubscribe header.
-// POST calls need the service role key as the Bearer token. Deployed with --no-verify-jwt so the
+// POST calls need the DIGEST_KEY secret (or the service role key) as the Bearer token. Deployed with --no-verify-jwt so the
 // unsubscribe link works from an email, where nobody is signed in.
 //
 // Secrets: RESEND_API_KEY (Resend > API Keys, sending access). TMDB_TOKEN is already set for the tmdb function.
@@ -329,7 +329,12 @@ async function runSend(force: boolean) {
 async function runTest(as?: string) {
   const world = await loadWorld();
   const hosts = [...world.people.values()].filter((p) => p.is_host);
-  const target = as ? [...world.people.values()].find((p) => (p.name || '').toLowerCase().startsWith(as.toLowerCase())) : null;
+  // "Rick", "rick" or "Rick Wetzel" all find Rick: full name first, then first name.
+  const norm = (x: string) => x.trim().toLowerCase();
+  const people = [...world.people.values()];
+  const target = !as ? null
+    : people.find((p) => norm(p.name || '') === norm(as))
+      ?? people.find((p) => norm(p.name || '').split(/\s+/)[0] === norm(as).split(/\s+/)[0]) ?? null;
   if (as && !target) return { error: `No member named ${as}` };
   const out: string[] = [];
   for (const host of hosts) {
@@ -363,7 +368,8 @@ Deno.serve(async (req) => {
       return Response.redirect(`${APP}/#/unsubscribed${ok ? '' : '/bad'}`, 302);
     }
     const bearer = (req.headers.get('Authorization') ?? '').replace('Bearer ', '');
-    if (req.method !== 'POST' || bearer !== SERVICE_KEY) return new Response('Not allowed', { status: 401 });
+    const callKey = Deno.env.get('DIGEST_KEY'); // set by the Sunday email GitHub Action on each run
+    if (req.method !== 'POST' || !bearer || (bearer !== SERVICE_KEY && bearer !== callKey)) return new Response('Not allowed', { status: 401 });
     const body = await req.json().catch(() => ({}));
     const result = body.mode === 'test' ? await runTest(body.as || undefined) : body.mode === 'send' ? await runSend(!!body.force) : { error: 'mode must be send or test' };
     return new Response(JSON.stringify(result, null, 2), { headers: { 'Content-Type': 'application/json' } });
