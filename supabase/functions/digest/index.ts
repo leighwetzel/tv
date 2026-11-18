@@ -231,8 +231,9 @@ function card(p: Pick, names: Map<string, any>, services: string[], follows: Set
   </td></tr></table></td></tr>`;
 }
 
+// Section headings: same as "Everything" in the app's Showing line (15px, 600, ink).
 const heading = (text: string, sub = '') =>
-  `<tr><td style="padding:22px 16px ${sub ? '2px' : '8px'};font-family:${FONT};font-size:15px;font-weight:600;color:${C.ink}">${esc(text)}</td></tr>` // same as "Everything" in the app's Showing line +
+  `<tr><td style="padding:22px 16px ${sub ? '2px' : '8px'};font-family:${FONT};font-size:15px;font-weight:600;color:${C.ink}">${esc(text)}</td></tr>` +
   (sub ? `<tr><td style="padding:0 16px 10px;font-family:${FONT};font-size:15px;color:${C.muted}">${esc(sub)}</td></tr>` : '');
 
 // unsubFor: whose unsubscribe link goes in the email (a test copy carries the host's own, never the person's).
