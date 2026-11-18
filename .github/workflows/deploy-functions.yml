@@ -17,3 +17,5 @@ jobs:
         with:
           version: latest
       - run: supabase functions deploy tmdb --project-ref iozcageqqmoykdjizgob --use-api --yes
+      # digest runs its own checks, so the unsubscribe link works from an email with nobody signed in.
+      - run: supabase functions deploy digest --project-ref iozcageqqmoykdjizgob --use-api --no-verify-jwt --yes

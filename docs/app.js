@@ -247,6 +247,16 @@ async function route() {
     history.replaceState(null, '', location.pathname);
     toast('That sign-in link expired. Use the 6-digit code instead.');
   }
+  // From the Sunday email's Stop these emails link. Works signed in or out.
+  if (location.hash.startsWith('#/unsubscribed')) {
+    $nav.hidden = true;
+    const bad = location.hash.endsWith('/bad');
+    if (state.me && !bad) state.me.weekly_email = false;
+    $app.innerHTML = `<section><h1>${bad ? 'That link didn’t work' : 'Sunday email off'}</h1>
+      <p>${bad ? 'Turn the Sunday email off on your Me page instead: <b>Weekly email</b>, then <b>Off</b>.' : 'You won’t get the Sunday email anymore. To turn it back on, go to your Me page and set <b>Weekly email</b> to <b>On</b>.'}</p>
+      <p><a class="btn primary big" href="#/feed">Open TV Rex</a></p></section>`;
+    return;
+  }
   if (!state.session) {
     $nav.hidden = true;
     if (location.hash.startsWith('#/help')) return viewHelp();
@@ -783,7 +793,21 @@ actions.save = async (d, el) => {
 
 // ---------------------------------------------------------------- title page
 
-async function viewTitle(id) {
+async function viewTitle(id, act) {
+  // From the Sunday email's Want to watch button: save it (crediting friends who loved or liked it), then show the page.
+  if (act === 'save') {
+    history.replaceState(null, '', `#/title/${encodeURIComponent(id)}`);
+    const [{ data: rated }, { data: rs }] = await Promise.all([
+      sb.from('ratings').select('title_id').eq('user_id', state.me.id).eq('title_id', id).maybeSingle(),
+      sb.from('ratings').select('user_id, rating').eq('title_id', id),
+    ]);
+    if (!rated) {
+      const { error } = await sb.from('watchlist').upsert({ user_id: state.me.id, title_id: id, watched_at: null }, { onConflict: 'user_id,title_id', ignoreDuplicates: true });
+      const recs = (rs ?? []).filter((r) => !isMe(r.user_id) && POSITIVE.includes(r.rating)).map((r) => r.user_id);
+      if (!error && recs.length) await sb.from('watchlist_credits').upsert(recs.map((rid) => ({ user_id: state.me.id, title_id: id, recommender_id: rid })), { ignoreDuplicates: true });
+      if (!error) toast('Saved to your list');
+    }
+  }
   const [{ data: t }, { data: rs }, { data: wl }] = await Promise.all([
     sb.from('titles').select('*').eq('id', id).single(),
     sb.from('ratings').select('user_id, title_id, rating, note, season, activity_at').eq('title_id', id).order('activity_at', { ascending: false }),
