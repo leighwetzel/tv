@@ -1109,7 +1109,7 @@ async function viewMe() {
   const set = (id, html) => { const el = document.getElementById(id); if (el) el.innerHTML = html; };
   $app.innerHTML = `<div id="meRoot" class="me">
     <div class="me-head">${avatar(state.me.id).replace('class="avatar"', 'class="avatar lg" id="myAvatar"')}
-      <div><h1>${esc(state.me.name)}</h1><span class="muted" id="meCount">&nbsp;</span></div></div>
+      <div><h1>${esc(state.me.name)}</h1><span class="muted" id="meCount">&nbsp;</span>${state.me.is_host ? '<span class="muted" id="meMembers"></span>' : ''}</div></div>
     <div class="list me-list" id="meAdmin" hidden></div>
     <div class="list me-list">
       ${meRow('meProfile', 'profile', 'Name and photo', `
@@ -1157,6 +1157,9 @@ async function viewMe() {
   if (reqsErr) console.error('invite_requests', reqsErr);
 
   set('meCount', `${nRatings ?? 0} rating${nRatings === 1 ? '' : 's'}`);
+  // Hosts only: how many people have joined (members see every member, so this counts them all).
+  if (state.me.is_host) sb.from('profiles').select('id', { count: 'exact', head: true }).eq('is_member', true)
+    .then(({ count }) => { if (live() && count != null) set('meMembers', `${count} member${count === 1 ? '' : 's'}`); });
   set('mePicksSum', nRatings ? String(nRatings) : '');
   if (state.services) { set('svc', serviceChips('toggleMySvc')); set('meSvcSum', svcSummary()); }
 

@@ -85,6 +85,7 @@ label { font-size: calc(var(--base) - 3px); color: var(--muted); font-weight: 60
 .note.clamp { display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; }
 [hidden] { display: none !important; }
 .me-head { display: flex; gap: 16px; align-items: center; }
+#meMembers { display: block; } /* hosts only: second line under the rating count */
 /* Me: collapsed rows with an icon, label, short summary and a chevron (Nov 18). */
 .me { display: flex; flex-direction: column; gap: 16px; }
 .me-list > details { padding: 0; }
