@@ -1195,9 +1195,11 @@ async function viewMe() {
 
   if (invitesClosed ? state.me.is_host : true) {
     document.getElementById('meInv').hidden = false;
-    if (myInvites.length) {
+    const n = (k) => myInvites.filter((i) => inviteState(i) === k).length;
+    if (n('pending') || n('joined')) {
       set('meInvSum', inviteCounts(myInvites));
-      set('meInvLink', `<a class="btn big" href="#/invites">See my invites</a>`);
+      // Pending and Joined as their own rows (Nov 18), each opening just that list.
+      set('meInvLink', `<div class="list">${['pending', 'joined'].filter(n).map((k) => `<a class="item" href="#/invites/${k}"><span>${k === 'pending' ? 'Pending' : 'Joined'}</span><span class="muted">${n(k)} ›</span></a>`).join('')}</div>`);
     }
   }
   if (!keysErr) {
@@ -1492,20 +1494,21 @@ actions.removeInvite = async (d, el) => {
   const { error, count } = await sb.from('invites').delete({ count: 'exact' }).eq('code', d.code).is('used_by', null);
   if (error || !count) { el.disabled = false; console.error('remove invite', error); return toast('Couldn’t remove that link. Try again.'); }
   toast('Link removed');
-  viewInvites();
+  route(); // stays on whichever list you were on
 };
-async function viewInvites() {
-  await loadPeople();
+async function viewInvites(group) {
   const list = await loadMyInvites();
+  if (list.some((i) => i.used_by && !state.people.has(i.used_by))) await loadPeople(); // someone joined since the app opened
   const of = (k) => list.filter((i) => inviteState(i) === k);
   const forLine = (i) => i.for_name ? `For ${esc(i.for_name)}` : 'Invite link';
-  const pending = of('pending'), joined = of('joined');
+  const pending = group === 'joined' ? [] : of('pending'), joined = group === 'pending' ? [] : of('joined');
+  const title = group === 'pending' ? 'Pending invites' : group === 'joined' ? 'Joined' : 'My invites';
   $app.innerHTML = `
     <a href="#/me">← Me</a>
-    <div><h1>My invites</h1><span class="muted">Expired links drop off this list on their own.</span></div>
-    ${pending.length || joined.length ? '' : '<p class="empty">No invites yet. Tap Invite someone on Me.</p>'}
-    ${pending.length ? `<h2>Pending</h2><div class="list">${pending.map((i) => `<div class="spread"><span><strong>${forLine(i)}</strong><br><span class="muted">Made ${when(i.created_at)} · ${expiresIn(i.expires_at)}</span></span>${removeBtn(i, true)}</div>`).join('')}</div>` : ''}
-    ${joined.length ? `<h2>Joined</h2><div class="list">${joined.map((i) => state.people.get(i.used_by)?.name
+    <div><h1>${title}</h1>${group === 'joined' ? '' : '<span class="muted">Expired links drop off this list on their own.</span>'}</div>
+    ${pending.length || joined.length ? '' : `<p class="empty">${group === 'pending' ? 'No pending invites.' : group === 'joined' ? 'No one has joined yet.' : 'No invites yet. Tap Invite someone on Me.'}</p>`}
+    ${pending.length ? `${group ? '' : '<h2>Pending</h2>'}<div class="list">${pending.map((i) => `<div class="spread"><span><strong>${forLine(i)}</strong><br><span class="muted">Made ${when(i.created_at)} · ${expiresIn(i.expires_at)}</span></span>${removeBtn(i, true)}</div>`).join('')}</div>` : ''}
+    ${joined.length ? `${group ? '' : '<h2>Joined</h2>'}<div class="list">${joined.map((i) => state.people.get(i.used_by)?.name
       ? `<a class="item" href="#/friend/${encodeURIComponent(i.used_by)}"><span class="row" style="flex-wrap:nowrap">${avatar(i.used_by)}<span>${esc(nameOf(i.used_by))}<br><span class="muted">Joined ${when(i.used_at)}</span></span></span><span class="muted">›</span></a>`
       : `<div><strong>${i.for_name ? esc(i.for_name) : 'Someone'}</strong><br><span class="muted">Joined ${when(i.used_at)}${state.people.has(i.used_by) ? ' · hasn’t finished signing up' : ''}</span></div>`).join('')}</div>` : ''}`;
   // A new account has a blank name until Welcome is finished (migration 004), so fall back to the invite's "who's it for" name.
