@@ -1395,10 +1395,22 @@ actions.deleteAccount = async () => {
 function viewAbout() {
   $app.innerHTML = `
     <a href="#/me">← Back</a>
-    <h1>About TV Rex</h1>
-    <p>A private place for friends and family to share what they’re watching.</p>
-    <a class="tmdb-logo" href="https://www.themoviedb.org"><img src="https://www.themoviedb.org/assets/v4/logos/v2/blue_short-8e7b30f73a4020692ccca9c88bafe5dcb6f8a62a4c6bc55cd9ba82bb2cd95f6c.svg" alt="TMDB" height="14"></a>
-    <p class="credits">This product uses the TMDB API but is not endorsed or certified by TMDB. Title data and images from <a href="https://www.themoviedb.org">TMDB</a>. Streaming data from <a href="https://www.justwatch.com">JustWatch</a>. Dinosaur from <a href="https://github.com/googlefonts/noto-emoji">Noto Emoji</a> (Apache 2.0).</p>`;
+    <div class="about-head"><img src="icon.png?v=5" alt="" width="72" height="72">
+      <div><h1>TV Rex</h1><p class="muted">TV and movie recommendations by your friends and family</p></div></div>
+    <div class="card about-card"><p>A private place for friends and family to share what they’re watching.</p></div>
+    <div class="about-section"><h2 class="section-label">How it works</h2>
+      <div class="list intro">
+        ${introRow('<path d="M12 3l2.7 5.6 6.1.9-4.4 4.3 1 6.1L12 17l-5.4 2.9 1-6.1L3.2 9.5l6.1-.9z"/>', 'Rate what you watch', 'Say if you loved it, liked it, didn’t like it or gave up, and add a note if you want.')}
+        ${introRow('<path d="M6 3h12v18l-6-4-6 4z"/><path d="M12 7v6M9 10h6"/>', 'Save friends’ picks', 'Keep a list of what you’re watching and what’s next.')}
+        ${introRow('<rect x="3" y="5" width="18" height="12" rx="2"/><path d="M8 21h8M12 17v4"/>', 'See where it’s streaming', 'Every show lists the services it’s on.')}
+        ${introRow('<rect x="3" y="5" width="18" height="14" rx="2"/><path d="M3 7l9 6 9-6"/>', 'Sunday email', 'Up to three picks from people you follow.')}
+      </div></div>
+    <div class="about-section"><h2 class="section-label">Credits</h2>
+      <div class="card about-card about-credits">
+        <p>Title data and images from <a href="https://www.themoviedb.org">TMDB</a>. Streaming data from <a href="https://www.justwatch.com">JustWatch</a>. Dinosaur from <a href="https://github.com/googlefonts/noto-emoji">Noto Emoji</a> (Apache 2.0).</p>
+        <p class="muted">This product uses the TMDB API but is not endorsed or certified by TMDB.</p>
+        <a class="tmdb-logo" href="https://www.themoviedb.org"><img src="https://www.themoviedb.org/assets/v4/logos/v2/blue_short-8e7b30f73a4020692ccca9c88bafe5dcb6f8a62a4c6bc55cd9ba82bb2cd95f6c.svg" alt="TMDB" height="14"></a>
+      </div></div>`;
 }
 
 // ---------------------------------------------------------------- feedback
