@@ -95,11 +95,6 @@ const kind = (t) => `${t.media_type === 'tv' ? 'TV' : 'Movie'}${t.year ? ' · ' 
 const BRAND = `<header class="brand">
   <img class="logo" src="icon.png?v=5" alt="">
   <div><h1>About TV Rex</h1><p class="tagline">Picks from friends and family</p></div></header>`;
-const FOOTER = `<footer class="appfooter">
-  <a class="other" href="https://walk.xoleigh.com"><img src="https://walk.xoleigh.com/icons/icon-192.png?v=4" alt="">
-    <span><strong>Try Wiki Walk</strong><span class="muted">A walking tour in your pocket</span></span></a>
-  <div class="links"><a href="https://xoleigh.com">xoleigh.com</a><span aria-hidden="true">·</span><a href="#/feedback">Feedback</a></div>
-</footer>`;
 const personLink = (id) => `<a class="person" href="#/friend/${encodeURIComponent(id)}">${esc(nameOf(id))}</a>`;
 const SAVED = '<span class="btn saved">✓ Saved</span>';
 const WATCHING = '<span class="btn saved">✓ Watching</span>'; // shown in place of + Want to watch once a title is on your list
@@ -651,8 +646,7 @@ async function renderFeed({ rows, wl }) {
     ${list.length ? list.slice(0, limit).map((c) => feedCard(c, saved)).join('') + (list.length > limit
       ? `<button class="big" data-act="feedMore">Show more · ${list.length - limit} left</button><p class="muted" style="text-align:center;margin:0">Showing ${limit} of ${list.length} titles</p>` : '')
       : following && !state.following.size ? '<p class="empty">You’re not following anyone yet. In Everyone, tap a name on a review, then tap Follow.</p>'
-      : `<p class="empty">No picks yet. ${state.people.size <= 1 ? 'Once others join, their picks show up here.' : 'Rate something to get things going.'}</p>`}
-    ${FOOTER}`;
+      : `<p class="empty">No picks yet. ${state.people.size <= 1 ? 'Once others join, their picks show up here.' : 'Rate something to get things going.'}</p>`}`;
 }
 actions.feedPeople = (d) => { state.feedPeople = d.val; state.feedLimit = FEED_PAGE; route(); };
 actions.feedMore = async () => {
@@ -1136,13 +1130,13 @@ async function viewMe() {
     </div>
     <div class="list me-list">
       <a class="item me-link" href="#/help">${ME_ICONS.help}<span class="me-label">Help</span><span class="muted">›</span></a>
+      <a class="item me-link" href="#/feedback">${ME_ICONS.feedback}<span class="me-label">Feedback</span><span class="muted">›</span></a>
       <a class="item me-link" href="#/about">${ME_ICONS.about}<span class="me-label">About and credits</span><span class="muted">›</span></a>
     </div>
     <div class="list">
       <button class="link" data-act="signOut">Sign out</button>
       <button class="link danger" data-act="deleteAccount">Delete my account</button>
-    </div>
-    ${FOOTER}</div>`;
+    </div></div>`;
   const svcSummary = () => { const n = state.services?.filter((s) => s.ids.some((i) => myServices().includes(i))).length ?? 0; return n ? `${n} chosen` : 'None chosen'; };
   if (state.services) set('meSvcSum', svcSummary());
 
@@ -1407,6 +1401,7 @@ function viewAbout() {
       </div></div>
     <div class="about-section"><h2 class="section-label">Credits</h2>
       <div class="card about-card about-credits">
+        <p>Made by Leigh at <a href="https://xoleigh.com">xoleigh.com</a>.</p>
         <p>Title data and images from <a href="https://www.themoviedb.org">TMDB</a>. Streaming data from <a href="https://www.justwatch.com">JustWatch</a>. Dinosaur from <a href="https://github.com/googlefonts/noto-emoji">Noto Emoji</a> (Apache 2.0).</p>
         <p class="muted">This product uses the TMDB API but is not endorsed or certified by TMDB.</p>
         <a class="tmdb-logo" href="https://www.themoviedb.org"><img src="https://www.themoviedb.org/assets/v4/logos/v2/blue_short-8e7b30f73a4020692ccca9c88bafe5dcb6f8a62a4c6bc55cd9ba82bb2cd95f6c.svg" alt="TMDB" height="14"></a>
