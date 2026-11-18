@@ -1005,7 +1005,8 @@ async function viewList() {
       <a href="${titleLink(r.titles)}">${poster(r.titles.poster_path, 'sm')}</a>
       <div class="pick-body"><a class="title" href="${titleLink(r.titles)}">${esc(r.titles.name)}</a>
         <span class="muted">${line}</span>${watchOn(r.title_id)}</div></div>
-      <div class="row actions">${buttons}</div></div>`;
+      <div class="row actions">${buttons}</div>
+      <button class="link small remove" data-act="removeFromList" data-id="${esc(r.title_id)}" data-name="${esc(r.titles.name)}">Remove from list</button></div>`;
   const from = (r) => {
     const f = r.watchlist_credits.map((c) => personLink(c.recommender_id));
     return f.length ? 'from ' + f.join(', ') : 'added by you';
@@ -1044,6 +1045,14 @@ actions.stopWatching = async (d) => {
   const { error } = await sb.from('watchlist').update({ started_at: null }).eq('user_id', state.me.id).eq('title_id', d.id);
   if (error) throw error;
   toast('Moved back to Want to watch');
+  route();
+};
+// Takes a title off Watching or Want to watch entirely (Not watching only moves it back to Want to watch).
+actions.removeFromList = async (d) => {
+  if (!confirm(`Remove ${d.name} from your list?`)) return;
+  const { error } = await sb.from('watchlist').delete().eq('user_id', state.me.id).eq('title_id', d.id);
+  if (error) throw error;
+  toast('Removed from your list');
   route();
 };
 actions.watched = async (d) => {
