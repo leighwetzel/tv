@@ -341,7 +341,7 @@ async function runTest(as?: string) {
   const target = !as ? null
     : people.find((p) => norm(p.name || '') === norm(as))
       ?? people.find((p) => norm(p.name || '').split(/\s+/)[0] === norm(as).split(/\s+/)[0]) ?? null;
-  if (as && !target) return { error: `No member named ${as}` };
+  if (as && !target) return { error: `No member named ${as}`, members: people.map((p) => p.name || '(no name)').sort() };
   const out: string[] = [];
   for (const host of hosts) {
     const person = target ?? host;
