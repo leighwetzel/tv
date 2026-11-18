@@ -32,7 +32,7 @@ jobs:
           # A fresh key each run: saved as the function's DIGEST_KEY secret, then used to call it.
           KEY=$(openssl rand -hex 24)
           echo "::add-mask::$KEY"
-          supabase secrets set DIGEST_KEY="$KEY" --project-ref "$REF"
+          supabase secrets set DIGEST_KEY="$KEY" --project-ref "$REF" --yes
           MODE="${{ github.event.inputs.mode || 'send' }}"
           FORCE=false
           [ "${{ github.event_name }}" = "workflow_dispatch" ] && [ "$MODE" = "send" ] && FORCE=true
