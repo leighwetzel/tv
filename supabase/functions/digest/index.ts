@@ -22,8 +22,7 @@ const APP = 'https://tv.xoleigh.com';
 const FROM = 'TV Rex <tv@xoleigh.com>';
 const IMG = 'https://image.tmdb.org/t/p/w154';
 const TZ = 'America/Los_Angeles';
-const SHOW = 3;            // titles per email when topping up
-const MAX_FOLLOWED = 5;    // most titles from people you follow
+const SHOW = 3;            // titles per email, at most
 const REVIEWS_PER_CARD = 3;
 const DAY = 24 * 60 * 60 * 1000;
 
@@ -169,17 +168,17 @@ async function picksFor(userId: string, world: Awaited<ReturnType<typeof loadWor
     const followedScore = fromFollowed.reduce((s, r) => s + SCORE[r.rating], 0);
     const otherScore = fromOthers.reduce((s, r) => s + SCORE[r.rating], 0);
     const order = (a: Rating, b: Rating) => Number(follows.has(b.user_id)) - Number(follows.has(a.user_id)) || SCORE[b.rating] - SCORE[a.rating] || Date.parse(b.activity_at) - Date.parse(a.activity_at);
-    const reviews = [...rs].sort(order).slice(0, REVIEWS_PER_CARD);
     const latest = Math.max(...rs.map((r) => Date.parse(r.activity_at)));
-    if (followedScore > 0) followedPicks.push({ title: world.titles.get(id), reviews, followed: true, score: followedScore, latest });
-    else if (otherScore > 0) popular.push({ title: world.titles.get(id), reviews, followed: false, score: otherScore, latest });
+    // From people you follow: only their reviews on the card. Popular: everyone's.
+    if (followedScore > 0) followedPicks.push({ title: world.titles.get(id), reviews: fromFollowed.sort(order).slice(0, REVIEWS_PER_CARD), followed: true, score: followedScore, latest });
+    else if (otherScore > 0) popular.push({ title: world.titles.get(id), reviews: [...rs].sort(order).slice(0, REVIEWS_PER_CARD), followed: false, score: otherScore, latest });
   }
   const best = (a: Pick, b: Pick) => b.score - a.score || b.latest - a.latest;
   followedPicks.sort(best);
   popular.sort(best);
-  const fromFollowed = followedPicks.slice(0, MAX_FOLLOWED);
+  const fromFollowed = followedPicks.slice(0, SHOW);
   const topUp = popular.slice(0, Math.max(0, SHOW - fromFollowed.length));
-  return { fromFollowed, popular: topUp, follows };
+  return { fromFollowed, popular: topUp, follows, more: followedPicks.length - fromFollowed.length };
 }
 
 // ------------------------------------------------------------------ the email
@@ -233,16 +232,17 @@ async function buildEmail(person: any, picks: Awaited<ReturnType<typeof picksFor
   const services = await servicesFor(all.map((p) => p.title.id));
   const first = (person.name || '').split(' ')[0];
   const n = picks.fromFollowed.length;
+  const total = n + picks.more;
   const lead = n
-    ? `${n} new ${n === 1 ? 'pick' : 'picks'} from people you follow this week${picks.popular.length ? ", plus what's popular on TV Rex" : ''}.`
+    ? `${total} new ${total === 1 ? 'pick' : 'picks'} from people you follow this week${picks.more ? `. Here are the top ${n}` : picks.popular.length ? ", plus what's popular on TV Rex" : ''}.`
     : "Nothing new from people you follow this week, so here's what's popular on TV Rex.";
   const top = picks.fromFollowed[0] ?? picks.popular[0];
   const topName = names.get(top.reviews[0].user_id)?.name || 'Someone';
   const subject = n
-    ? `${topName} ${top.reviews[0].rating === 'loved' ? 'loved' : 'liked'} ${top.title.name}${all.length > 1 ? (picks.popular.length ? ", plus what's popular on TV Rex" : ` and ${all.length - 1} more`) : ''}`
+    ? `${topName} ${top.reviews[0].rating === 'loved' ? 'loved' : 'liked'} ${top.title.name}${total > 1 ? ` and ${total - 1} more` : picks.popular.length ? ", plus what's popular on TV Rex" : ''}`
     : `Popular on TV Rex: ${top.title.name}${all.length > 1 ? ` and ${all.length - 1} more` : ''}`;
   const preheader = n
-    ? `${n} from people you follow${picks.popular.length ? `, ${picks.popular.length} popular` : ''}`
+    ? `${total} from people you follow${picks.popular.length ? `, ${picks.popular.length} popular` : ''}`
     : `${all.length} popular ${all.length === 1 ? 'pick' : 'picks'} you haven't seen`;
   const unsub = await unsubUrl(person.id);
 
@@ -261,6 +261,7 @@ async function buildEmail(person: any, picks: Awaited<ReturnType<typeof picksFor
     ${first ? `Hi ${esc(first)},<br>` : ''}${esc(lead)}
   </td></tr>
   ${n ? heading('From people you follow') + picks.fromFollowed.map((p) => card(p, names, services.get(p.title.id) ?? [], picks.follows)).join('') : ''}
+  ${picks.more ? `<tr><td style="padding:0 12px">${button(`${APP}/#/feed`, `See ${picks.more} more in TV Rex`, false)}</td></tr>` : ''}
   ${picks.popular.length ? heading('Popular on TV Rex', "From people you don't follow yet") + picks.popular.map((p) => card(p, names, services.get(p.title.id) ?? [], picks.follows)).join('') : ''}
   <tr><td style="padding:16px 12px 0">${button(APP, 'Open TV Rex')}</td></tr>
   <tr><td style="padding:20px 16px 0;font-family:${FONT};font-size:20px;line-height:1.4;color:${C.ink}">
