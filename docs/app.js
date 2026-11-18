@@ -94,7 +94,7 @@ const poster = (path, cls = '') => path
 const kind = (t) => `${t.media_type === 'tv' ? 'TV' : 'Movie'}${t.year ? ' · ' + t.year : ''}`;
 const BRAND = `<header class="brand">
   <img class="logo" src="icon.png?v=5" alt="">
-  <div><h1>TV Rex</h1><p class="tagline">Picks from friends and family</p></div></header>`;
+  <div><h1>About TV Rex</h1><p class="tagline">Picks from friends and family</p></div></header>`;
 const FOOTER = `<footer class="appfooter">
   <a class="other" href="https://walk.xoleigh.com"><img src="https://walk.xoleigh.com/icons/icon-192.png?v=4" alt="">
     <span><strong>Try Wiki Walk</strong><span class="muted">A walking tour in your pocket</span></span></a>
@@ -1396,7 +1396,7 @@ function viewAbout() {
   $app.innerHTML = `
     <a href="#/me">← Back</a>
     <div class="about-head"><img src="icon.png?v=5" alt="" width="72" height="72">
-      <div><h1>TV Rex</h1><p class="muted">TV and movie recommendations by your friends and family</p></div></div>
+      <div><h1>About TV Rex</h1><p class="muted">TV and movie recommendations by your friends and family</p></div></div>
     <div class="card about-card"><p>A private place for friends and family to share what they’re watching.</p></div>
     <div class="about-section"><h2 class="section-label">How it works</h2>
       <div class="list intro">
