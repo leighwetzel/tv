@@ -820,14 +820,15 @@ async function viewTitle(id, act) {
       <div class="pick-body"><h1>${esc(t.name)}</h1><span class="muted">${kind(t)}</span>
         ${mine ? '' : listButtons}
       </div></div>
+    ${mine ? '' : `<button class="primary big" id="writeReview" data-act="openReview">Write review</button>
+      <div id="newReview" hidden>${ratingForm(null, id)}</div>`}
     <section class="card watchbox">
       <div class="muted small">WATCH ON</div>
       ${subs(id).length ? `<div class="row">${subs(id).map((s) => `<span class="chip ${isMine(s) ? 'on' : ''}" style="display:inline-flex;align-items:center">${esc(s.name)}</span>`).join('')}</div>` : '<p>Not on a subscription service in the US right now.</p>'}
       ${p.rent?.length || p.buy?.length ? `<p class="muted">Rent or buy: ${esc([...new Set([...(p.rent ?? []), ...(p.buy ?? [])].map((s) => serviceName(s.name)))].slice(0, 4).join(', '))}</p>` : ''}
       <p class="credits">Streaming data from JustWatch</p>
     </section>
-    <h2>Your rating</h2>
-    ${mine ? `
+    ${mine ? `<h2>Your rating</h2>
       <div class="card" id="myReview">
         <div class="spread"><span>${ratingTag(mine)} <span class="muted">· ${when(mine.activity_at)}</span></span>
           <button class="link" data-act="editReview">Edit review</button></div>
@@ -837,7 +838,7 @@ async function viewTitle(id, act) {
         ${ratingForm(mine, id, 'Save changes')}
         <div class="row"><button class="link" data-act="cancelEdit">Cancel</button>
           <button class="link danger" data-act="removeRating" data-id="${esc(id)}">Remove my rating</button></div>
-      </div>` : ratingForm(null, id)}
+      </div>` : ''}
     <h2>Reviews</h2>
     ${tally(rs ?? [])}
     ${others.length ? `<div class="list">${others.map((r) => reviewHtml(r)).join('')}</div>` : '<p class="muted">No one else has rated this yet.</p>'}`;
@@ -854,6 +855,12 @@ function ratingForm(mine, titleId, saveLabel = 'Save review') {
     <p class="muted">Loved and Liked put this in everyone’s feed. You can change your rating anytime.</p>
     <button class="primary big" type="button" data-act="saveRating">${saveLabel}</button></form>`;
 }
+actions.openReview = () => {
+  document.getElementById('writeReview').hidden = true;
+  const box = document.getElementById('newReview');
+  box.hidden = false;
+  box.scrollIntoView({ behavior: 'smooth', block: 'start' });
+};
 actions.editReview = () => {
   document.getElementById('myReview').hidden = true;
   document.getElementById('reviewForm').hidden = false;
@@ -933,6 +940,7 @@ async function viewAdd() {
   const q = document.getElementById('q');
   q.focus();
   q.oninput = () => {
+    state.searchQ = q.value;
     // The explainer is for an empty box; it steps aside once you start searching.
     document.getElementById('intro').hidden = q.value.trim().length >= 2;
     clearTimeout(searchTimer);
@@ -944,12 +952,14 @@ async function viewAdd() {
       for (const t of results) searchCache.set(t.id, t);
       if (q.value !== asked) return; // typing moved on
       box.innerHTML = results.length ? `<div class="list">${results.map((t) =>
-        `<a class="item" href="#/rate/${encodeURIComponent(t.id)}" data-act="chooseTitle" data-id="${esc(t.id)}">
+        `<a class="item" href="#/title/${encodeURIComponent(t.id)}" data-act="chooseTitle" data-id="${esc(t.id)}">
           <span class="row">${poster(t.poster_path, 'sm')}<span><strong>${esc(t.name)}</strong><br><span class="muted">${kind(t)}</span><span class="who-rated" data-id="${esc(t.id)}"></span></span></span><span class="muted">›</span></a>`).join('')}</div>`
         : '<p class="muted">No matches. Try another spelling.</p>';
       fillWhoRated(results.map((t) => t.id)); // results show right away; names fill in a moment later
     }, 300);
   };
+  if (state.backToSearch && state.searchQ) { q.value = state.searchQ; q.oninput(); } // back from a show's page: same results
+  state.backToSearch = false;
 }
 // "Brian loved it · Maggie liked it · +2 more" under each search result. You first, then newest.
 async function fillWhoRated(ids) {
@@ -963,21 +973,13 @@ async function fillWhoRated(ids) {
     el.innerHTML = `<br>${named.join(' · ')}${rs.length > 2 ? ` · +${rs.length - 2} more` : ''}`;
   }
 }
+// A search result opens the show's page: where to watch, friends' reviews, and Write review (Nov 18).
 actions.chooseTitle = async (d) => {
   const t = await ensureTitle(d.id);
   if (!t) return toast('Couldn’t load that title. Try again.');
-  const { data: mine } = await sb.from('ratings').select('rating, note, season').eq('title_id', d.id).eq('user_id', state.me.id).maybeSingle();
-  await loadProviders([d.id]);
-  $app.innerHTML = `
-    <button class="link" data-act="backToAdd">← Search again</button>
-    <div class="pick">${poster(t.poster_path, 'lg')}<div class="pick-body"><h1>${esc(t.name)}</h1><span class="muted">${kind(t)}</span>${watchOn(t.id)}</div></div>
-    ${mine ? '' : `<div class="row actions"><button data-act="watchNow" data-id="${esc(d.id)}">Watching</button>
-      <button data-act="save" data-id="${esc(d.id)}">+ Want to watch</button></div>`}
-    <h2>How was it?</h2>
-    ${mine ? '<p class="muted">You’ve rated this already. Change it below.</p>' : ''}
-    ${ratingForm(mine, d.id, mine ? 'Save changes' : 'Save review').replace('<form ', `<form data-after="#/title/${encodeURIComponent(d.id)}" `)}`;
+  state.backToSearch = true;
+  location.hash = `#/title/${encodeURIComponent(d.id)}`;
 };
-actions.backToAdd = () => viewAdd();
 
 // ---------------------------------------------------------------- want to watch
 
