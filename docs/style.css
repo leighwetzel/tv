@@ -166,7 +166,7 @@ a.more { align-self: flex-start; min-height: 44px; display: inline-flex; align-i
 .about-version { flex-direction: row; justify-content: space-between; align-items: baseline; gap: 12px; }
 .about-section { display: flex; flex-direction: column; gap: 8px; }
 .section-label { margin: 8px 0 0 4px; font-size: calc(var(--base) - 3px); color: var(--muted); text-transform: uppercase; letter-spacing: .02em; }
-.about-credits p:first-child { font-size: calc(var(--base) - 1px); line-height: 1.45; }
+.about-credits p:not(.muted) { font-size: calc(var(--base) - 1px); line-height: 1.45; }
 .tmdb-logo img { height: 14px; width: auto; display: block; }
 .pick > button { align-self: center; min-width: 50px; font-size: calc(var(--base) + 6px); }
 
