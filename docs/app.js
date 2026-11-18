@@ -789,6 +789,7 @@ actions.save = async (d, el) => {
   if (recs.length) await sb.from('watchlist_credits').upsert(recs.map((rid) => ({ user_id: state.me.id, title_id: d.id, recommender_id: rid })), { ignoreDuplicates: true });
   el.outerHTML = SAVED;
   toast('Saved to your list');
+  window.gtag?.('event', 'want_to_watch', { method: 'app', title_id: d.id });
 };
 
 // ---------------------------------------------------------------- title page
@@ -805,7 +806,10 @@ async function viewTitle(id, act) {
       const { error } = await sb.from('watchlist').upsert({ user_id: state.me.id, title_id: id, watched_at: null }, { onConflict: 'user_id,title_id', ignoreDuplicates: true });
       const recs = (rs ?? []).filter((r) => !isMe(r.user_id) && POSITIVE.includes(r.rating)).map((r) => r.user_id);
       if (!error && recs.length) await sb.from('watchlist_credits').upsert(recs.map((rid) => ({ user_id: state.me.id, title_id: id, recommender_id: rid })), { ignoreDuplicates: true });
-      if (!error) toast('Saved to your list');
+      if (!error) {
+        toast('Saved to your list');
+        window.gtag?.('event', 'want_to_watch', { method: 'email', title_id: id }); // Google Analytics: saves from the Sunday email
+      }
     }
   }
   const [{ data: t }, { data: rs }, { data: wl }] = await Promise.all([

@@ -22,6 +22,10 @@ const APP = 'https://tv.xoleigh.com';
 const FROM = 'TV Rex <tv@xoleigh.com>';
 const IMG = 'https://image.tmdb.org/t/p/w154';
 const TZ = 'America/Los_Angeles';
+// Every link in the email carries UTM tags for Google Analytics. The query goes before the # route.
+let campaign = 'sunday';
+const link = (route: string, content: string) =>
+  `${APP}/?utm_source=tv-rex&utm_medium=email&utm_campaign=${campaign}&utm_content=${content}${route ? '#' + route : ''}`;
 const SHOW = 3;            // titles per email, at most
 const REVIEWS_PER_CARD = 3;
 const DAY = 24 * 60 * 60 * 1000;
@@ -201,7 +205,7 @@ function card(p: Pick, names: Map<string, any>, services: string[], follows: Set
     const note = (r.note ?? '').trim();
     const short = note.length > 280 ? note.slice(0, 277).trimEnd() + '…' : note;
     const follow = follows.has(r.user_id) ? '' :
-      `<td width="96" valign="top" align="right"><a href="${APP}/#/friend/${encodeURIComponent(r.user_id)}" style="display:inline-block;padding:11px 12px;border:1px solid ${C.line};border-radius:8px;color:${C.blue};font-size:15px;font-weight:600;text-decoration:none;white-space:nowrap">+ Follow</a></td>`;
+      `<td width="96" valign="top" align="right"><a href="${esc(link(`/friend/${encodeURIComponent(r.user_id)}`, 'follow'))}" style="display:inline-block;padding:11px 12px;border:1px solid ${C.line};border-radius:8px;color:${C.blue};font-size:15px;font-weight:600;text-decoration:none;white-space:nowrap">+ Follow</a></td>`;
     return `<tr><td colspan="2" style="padding:12px 0 0"><table role="presentation" width="100%" cellpadding="0" cellspacing="0"><tr>
       <td width="46" valign="top"><div style="width:36px;height:36px;line-height:36px;border-radius:18px;background:${C.tint};color:${C.blue};font-size:15px;font-weight:700;text-align:center">${esc(name.slice(0, 1).toUpperCase())}</div></td>
       <td valign="top" style="font-family:${FONT}">
@@ -211,14 +215,14 @@ function card(p: Pick, names: Map<string, any>, services: string[], follows: Set
   }).join('');
   return `<tr><td style="padding:0 12px 8px"><table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:${C.card};border:1px solid ${C.line};border-radius:14px"><tr><td style="padding:12px;font-family:${FONT}">
     <table role="presentation" width="100%" cellpadding="0" cellspacing="0"><tr>
-      <td width="76" valign="top"><a href="${APP}/#/title/${encodeURIComponent(t.id)}">${poster}</a></td>
+      <td width="76" valign="top"><a href="${esc(link(`/title/${encodeURIComponent(t.id)}`, 'poster'))}">${poster}</a></td>
       <td valign="top">
         <div style="font-size:22px;font-weight:750;line-height:1.2;color:${C.ink}">${esc(t.name)}</div>
         <div style="font-size:15px;color:${C.muted};padding:4px 0 6px">${esc(kind)}</div>
         ${tags}
       </td></tr>
       ${reviews}
-      <tr><td style="padding-top:14px" colspan="2">${button(`${APP}/#/title/${encodeURIComponent(t.id)}/save`, '+ Want to watch', false)}</td></tr>
+      <tr><td style="padding-top:14px" colspan="2">${button(link(`/title/${encodeURIComponent(t.id)}/save`, 'want-to-watch'), '+ Want to watch', false)}</td></tr>
     </table>
   </td></tr></table></td></tr>`;
 }
@@ -252,7 +256,7 @@ async function buildEmail(person: any, picks: Awaited<ReturnType<typeof picksFor
 <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:${C.page}"><tr><td align="center">
 <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="max-width:560px">
   <tr><td style="background:${C.card};border-bottom:1px solid ${C.line};padding:16px;font-family:${FONT}">
-    <a href="${APP}" style="text-decoration:none"><table role="presentation" cellpadding="0" cellspacing="0"><tr>
+    <a href="${esc(link('', 'header'))}" style="text-decoration:none"><table role="presentation" cellpadding="0" cellspacing="0"><tr>
       <td><img src="${APP}/apple-touch-icon.png" width="44" height="44" alt="" style="display:block;border-radius:10px"></td>
       <td style="padding-left:12px"><div style="font-size:23px;font-weight:700;color:${C.ink}">TV Rex</div><div style="font-size:15px;color:${C.muted}">${esc(longDate())}</div></td>
     </tr></table></a>
@@ -261,15 +265,15 @@ async function buildEmail(person: any, picks: Awaited<ReturnType<typeof picksFor
     ${first ? `Hi ${esc(first)},<br>` : ''}${esc(lead)}
   </td></tr>
   ${n ? heading('From people you follow') + picks.fromFollowed.map((p) => card(p, names, services.get(p.title.id) ?? [], picks.follows)).join('') : ''}
-  ${picks.more ? `<tr><td align="center" style="padding:8px 16px 0;font-family:${FONT};font-size:17px"><a href="${APP}/#/feed" style="color:${C.blue};font-weight:600;text-decoration:none">See ${picks.more} more in TV Rex ›</a></td></tr>` : ''}
+  ${picks.more ? `<tr><td align="center" style="padding:8px 16px 0;font-family:${FONT};font-size:17px"><a href="${esc(link('/feed', 'see-more'))}" style="color:${C.blue};font-weight:600;text-decoration:none">See ${picks.more} more in TV Rex ›</a></td></tr>` : ''}
   ${picks.popular.length ? heading('Popular on TV Rex', "From people you don't follow yet") + picks.popular.map((p) => card(p, names, services.get(p.title.id) ?? [], picks.follows)).join('') : ''}
-  <tr><td style="padding:16px 12px 0">${button(APP, 'Open TV Rex')}</td></tr>
+  <tr><td style="padding:16px 12px 0">${button(link('', 'open-app'), 'Open TV Rex')}</td></tr>
   <tr><td style="padding:20px 16px 0;font-family:${FONT};font-size:20px;line-height:1.4;color:${C.ink}">
-    Watched something good lately? <a href="${APP}/#/add" style="color:${C.blue};font-weight:600">Add it</a> so the people who follow you see it next Sunday.
+    Watched something good lately? <a href="${esc(link('/add', 'add-it'))}" style="color:${C.blue};font-weight:600">Add it</a> so the people who follow you see it next Sunday.
   </td></tr>
   <tr><td style="padding:28px 16px 32px;font-family:${FONT};font-size:15px;line-height:1.4;color:${C.muted}">
     <div style="border-top:1px solid ${C.line};padding-top:20px">You get this on Sundays when there are new picks from people you follow, or popular ones you haven't seen. Nothing new, no email.</div>
-    <div style="padding-top:8px"><a href="${esc(unsub)}" style="color:${C.blue}">Stop these emails</a> · <a href="${APP}" style="color:${C.blue}">tv.xoleigh.com</a></div>
+    <div style="padding-top:8px"><a href="${esc(unsub)}" style="color:${C.blue}">Stop these emails</a> · <a href="${esc(link('', 'footer'))}" style="color:${C.blue}">tv.xoleigh.com</a></div>
     <div style="padding-top:8px">Streaming info from JustWatch.</div>
   </td></tr>
 </table></td></tr></table></body></html>`;
@@ -278,8 +282,8 @@ async function buildEmail(person: any, picks: Awaited<ReturnType<typeof picksFor
     first ? `Hi ${first},` : '', lead, '',
     ...all.map((p) => [`${p.title.name} (${p.title.media_type === 'tv' ? 'TV' : 'Movie'})${(services.get(p.title.id) ?? []).length ? ' · ' + services.get(p.title.id)!.join(', ') : ''}`,
       ...p.reviews.map((r) => `  ${names.get(r.user_id)?.name || 'Someone'} ${WORD[r.rating]}${r.note ? ': ' + r.note : ''}`),
-      `  ${APP}/#/title/${encodeURIComponent(p.title.id)}`, ''].join('\n')),
-    `Open TV Rex: ${APP}`, `Stop these emails: ${unsub}`,
+      `  ${link(`/title/${encodeURIComponent(p.title.id)}`, 'text-title')}`, ''].join('\n')),
+    `Open TV Rex: ${link('', 'text-open-app')}`, `Stop these emails: ${unsub}`,
   ].join('\n');
 
   return { subject, html, text, unsub, titleIds: all.map((p) => p.title.id) };
@@ -306,6 +310,7 @@ async function send(to: string, email: { subject: string; html: string; text: st
 
 async function runSend(force: boolean) {
   const now = laParts();
+  campaign = `sunday-${now.date}`;
   if (!force && !(now.weekday === 'Sun' && now.hour >= 8 && now.hour < 11)) return { skipped: `Not Sunday morning Pacific (${now.weekday} ${now.hour}:00)` };
   const world = await loadWorld();
   const { data: done, error: logErr } = await admin.from('email_sends').select('user_id').eq('week', now.date);
@@ -336,6 +341,7 @@ async function runSend(force: boolean) {
 }
 
 async function runTest(as?: string) {
+  campaign = `test-${laParts().date}`;
   const world = await loadWorld();
   const hosts = [...world.people.values()].filter((p) => p.is_host);
   // "Rick", "rick" or "Rick Wetzel" all find Rick: full name first, then first name.
