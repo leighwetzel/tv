@@ -12,7 +12,6 @@ const $nav = document.getElementById('nav');
 const IMG = 'https://image.tmdb.org/t/p/';
 const RATING = { loved: 'Loved', liked: 'Liked', didnt_like: "Didn't like", gave_up: 'Gave up' };
 const POSITIVE = ['loved', 'liked'];
-const ROUND = 15;
 const NOT_SERVICES = /justwatch|store|amazon video|google play|fandango|vudu|microsoft|spectrum|directv|^youtube$|plex channel/i;
 function serviceName(raw) {
   const n = String(raw)
@@ -168,8 +167,6 @@ const state = {
   services: null,         // streaming service list from TMDB
   feedType: 'all', feedGenre: 'all', listGenre: 'all', feedSvc: 'all', listSvc: 'all', listType: 'all', feedSort: 'review', listSort: 'added', feedPeople: 'all',
   following: new Set(),   // ids you follow
-  followsReady: false,    // false until the follows table exists (migration 005)
-  qp: null,               // quick-pick round in progress
 };
 
 const isMe = (id) => id === state.me?.id;
@@ -178,7 +175,7 @@ const nameOf = (id) => isMe(id) ? 'You' : (state.people.get(id)?.name || 'Someon
 // Other people's rows carry only their name and photo; your own settings come from my_settings().
 async function loadPeople() {
   // All three requests at once: one wait instead of three in a row.
-  const [{ data }, { data: mine, error }, { data: fl, error: fe }] = await Promise.all([
+  const [{ data }, { data: mine }, { data: fl }] = await Promise.all([
     sb.from('profiles').select('id, name, avatar_url, is_host, onboarded'),
     sb.rpc('my_settings'),
     sb.from('follows').select('followee'),
@@ -186,12 +183,7 @@ async function loadPeople() {
   state.people = new Map((data ?? []).map((p) => [p.id, p]));
   state.me = state.people.get(state.session.user.id) ?? null;
   if (!state.me) return;
-  if (!error && mine?.[0]) Object.assign(state.me, mine[0]);
-  else { // database not updated yet: older rules, read your own row directly
-    const { data: row } = await sb.from('profiles').select('services, weekly_email').eq('id', state.me.id).single();
-    Object.assign(state.me, row ?? {}, { is_member: true });
-  }
-  state.followsReady = !fe;
+  if (mine?.[0]) Object.assign(state.me, mine[0]);
   state.following = new Set((fl ?? []).map((f) => f.followee));
 }
 
@@ -238,23 +230,24 @@ function watchOn(id) {
 // ---------------------------------------------------------------- router
 
 const routes = {
-  feed: viewFeed, title: viewTitle, add: viewAdd, quickpick: viewQuickpick,
+  feed: viewFeed, title: viewTitle, add: viewAdd,
   list: viewList, me: viewMe, invites: viewInvites, feedback: viewFeedback, friend: viewFriend, welcome: viewWelcome, about: viewAbout, following: viewFollowing, passkey: viewPasskey, help: viewHelp,
 };
 
 async function route() {
   if (/error_description/.test(location.hash)) {
     history.replaceState(null, '', location.pathname);
-    toast('That sign-in link expired. Use the 6-digit code instead.');
+    toast('That sign-in link expired. Use the code instead.');
   }
   // From the Sunday email's Stop these emails link. Works signed in or out.
-  if (location.hash.startsWith('#/unsubscribed')) {
+  // Asks first: some email systems open every link to scan it, and that visit alone mustn't turn the email off.
+  if (location.hash.startsWith('#/unsubscribe/')) {
     $nav.hidden = true;
-    const bad = location.hash.endsWith('/bad');
-    if (state.me && !bad) state.me.weekly_email = false;
-    $app.innerHTML = `<section><h1>${bad ? 'That link didn’t work' : 'Sunday email off'}</h1>
-      <p>${bad ? 'Turn the Sunday email off on your Me page instead: <b>Weekly email</b>, then <b>Off</b>.' : 'You won’t get the Sunday email anymore. To turn it back on, go to your Me page and set <b>Weekly email</b> to <b>On</b>.'}</p>
-      <p><a class="btn primary big" href="#/feed">Open TV Rex</a></p></section>`;
+    const [, , u, t] = location.hash.split('/');
+    $app.innerHTML = `<section><h1>Stop the Sunday email?</h1>
+      <p>You’ll stop getting picks from TV Rex by email. You can turn it back on anytime on your Me page.</p>
+      <p><button class="primary big" data-act="unsubscribe" data-u="${esc(u)}" data-t="${esc(t)}">Turn off the Sunday email</button></p>
+      <p><a href="#/feed">Keep getting it</a></p></section>`;
     return;
   }
   if (!state.session) {
@@ -273,7 +266,7 @@ async function route() {
   const [name, ...rest] = location.hash.replace(/^#\/?/, '').split('/');
   let view = routes[name] ? name : 'feed';
   if (state.me.is_member === false) { $nav.hidden = true; return name === 'request' ? viewRequest() : name === 'feedback' ? viewFeedback(rest[0]) : viewNotMember(); }
-  if (!state.me.onboarded && view !== 'quickpick' && view !== 'about' && view !== 'passkey' && view !== 'help') view = 'welcome';
+  if (!state.me.onboarded && view !== 'about' && view !== 'passkey' && view !== 'help') view = 'welcome';
 
   $nav.hidden = view === 'welcome';
   const tab = view === 'invites' ? 'me' : view;
@@ -373,7 +366,7 @@ function viewSignIn(step = 'email', email = '') {
   } else {
     $app.innerHTML = `
       <h1>Check your email</h1>
-      <p class="muted">We emailed a 6-digit code to ${esc(email)}. It can take a minute to arrive; check spam if you don’t see it.</p>
+      <p class="muted">We emailed a sign-in code to ${esc(email)}. It can take a minute to arrive; check spam if you don’t see it.</p>
       <form id="f" class="field">
         <label for="code">Code</label>
         <input id="code" inputmode="numeric" autocomplete="one-time-code" maxlength="10" required>
@@ -410,7 +403,7 @@ const HELP_EMAIL = ''; // shown as "Still stuck? Email …" when set
 // Each group is for people signed out ('out'), signed in ('in'), or both. Tips are split per question.
 const HELP = [
   ['Getting in', 'out', [
-    ['How do I sign in?', 'Type your email and tap <b>Email me a code</b>. Open the email from TV Rex and type the 6-digit code. On iPhone, the code often appears above the keyboard so you can tap it instead.'],
+    ['How do I sign in?', 'Type your email and tap <b>Email me a code</b>. Open the email from TV Rex and type the code. On iPhone, the code often appears above the keyboard so you can tap it instead.'],
     ['How do I sign in with Face ID?', 'After you sign in with a code, TV Rex asks if you’d like to use Face ID. Tap <b>Yes</b>. Missed it? Once you’re in, go to <b>Me</b> and tap <b>Turn on</b> next to Sign in with Face ID. Next time, tap <b>Sign in with Face ID</b> and look at your phone.'],
     ['Why do I have to sign in again?', 'Safari forgets sign-ins for websites you haven’t opened in a week. Turn on Face ID and signing back in takes one look.'],
     ['I don’t have an invite', 'TV Rex is invite-only. If you know someone on it, ask them for a link, or <a href="#/request">request an invite</a> and we’ll email you one.'],
@@ -433,7 +426,7 @@ const HELP = [
   ['Tips', 'both', [
     ['How do I turn on Face ID?', 'Go to <b>Me</b> and tap <b>Turn on</b> next to Sign in with Face ID. Next time TV Rex asks you to sign in, tap <b>Sign in with Face ID</b> and look at your phone.', 'in'],
     ['How do I put TV Rex on my Home Screen?', 'In Safari, tap the Share button, then <b>Add to Home Screen</b>, then <b>Add</b>. Open TV Rex from the new icon and sign in once.'],
-    ['How do I make the text bigger?', 'TV Rex follows your iPhone or iPad text size: <b>Settings › Display &amp; Brightness › Text Size</b>. In Safari you can also tap <b>aA</b> in the address bar and tap the larger A.'],
+    ['How do I make the text bigger?', 'TV Rex keeps its text at one size on every iPhone and iPad, so the iPhone’s Text Size setting doesn’t change it. If you open TV Rex in Safari (not from the home-screen icon), you can tap <b>aA</b> in the address bar and tap the larger A.'],
   ]],
 ];
 function helpFor(who) {
@@ -622,15 +615,11 @@ async function renderFeed({ rows, wl }) {
   state.feedLast = { rows, wl };
   const limit = state.feedLimit ?? FEED_PAGE;
 
-  // Quick-pick ratings without a note become one summary line per person.
+  // Old quick-pick ratings without a note (from the retired quick-pick cards) stay out of the feed.
   const isQuiet = (r) => r.source === 'quickpick' && !r.note;
-  const weekAgo = Date.now() - 7 * 864e5;
-  const summary = new Map();
-  for (const r of rows ?? []) if (isQuiet(r) && !isMe(r.user_id) && Date.parse(r.activity_at) > weekAgo && (state.feedPeople !== 'following' || state.following.has(r.user_id)))
-    summary.set(r.user_id, (summary.get(r.user_id) ?? 0) + 1);
 
   // Following: only reviews by people you follow (and your own).
-  const following = state.followsReady && state.feedPeople === 'following';
+  const following = state.feedPeople === 'following';
   const inView = (r) => !following || isMe(r.user_id) || state.following.has(r.user_id);
 
   // One card per title, started by someone's Loved or Liked.
@@ -656,10 +645,9 @@ async function renderFeed({ rows, wl }) {
 
   $app.innerHTML = `
     ${BRAND}
-    ${state.followsReady ? `<div class="tabs" role="tablist" aria-label="Whose picks">
-      ${[['all', 'Everyone'], ['following', 'Following']].map(([v, l]) => `<button role="tab" class="${state.feedPeople === v ? 'on' : ''}" aria-selected="${state.feedPeople === v}" data-act="feedPeople" data-val="${v}">${l}</button>`).join('')}</div>` : ''}
+    <div class="tabs" role="tablist" aria-label="Whose picks">
+      ${[['all', 'Everyone'], ['following', 'Following']].map(([v, l]) => `<button role="tab" class="${state.feedPeople === v ? 'on' : ''}" aria-selected="${state.feedPeople === v}" data-act="feedPeople" data-val="${v}">${l}</button>`).join('')}</div>
     ${filterBar('feed')}
-    ${[...summary].map(([id, n]) => `<p class="muted"><a href="#/friend/${id}">${esc(nameOf(id))}</a> rated ${n} title${n > 1 ? 's' : ''} in quick-pick this week</p>`).join('')}
     ${list.length ? list.slice(0, limit).map((c) => feedCard(c, saved)).join('') + (list.length > limit
       ? `<button class="big" data-act="feedMore">Show more · ${list.length - limit} left</button><p class="muted" style="text-align:center;margin:0">Showing ${limit} of ${list.length} titles</p>` : '')
       : following && !state.following.size ? '<p class="empty">You’re not following anyone yet. In Everyone, tap a name on a review, then tap Follow.</p>'
@@ -821,7 +809,7 @@ async function viewTitle(id, act) {
   const onList = wl && !wl.watched_at;
   const listButtons = onList && wl.started_at ? WATCHING
     : `<div class="row">${onList ? SAVED : `<button class="primary" data-act="save" data-id="${esc(id)}">+ Want to watch</button>`}
-       ${'started_at' in (wl ?? { started_at: null }) ? `<button data-act="watchNow" data-id="${esc(id)}">Watching</button>` : ''}</div>`;
+       <button data-act="watchNow" data-id="${esc(id)}">Watching</button></div>`;
   await loadProviders([id]);
   const p = state.providers.get(id) ?? {};
   const mine = (rs ?? []).find((r) => isMe(r.user_id));
@@ -893,8 +881,7 @@ actions.saveRating = async (d, el) => {
   const seasonVal = form.querySelector('#season')?.value;
   const season = seasonVal ? Number(seasonVal) : null;
   const row = { user_id: state.me.id, title_id: titleId, rating, note, season, source: form.dataset.source || 'search' };
-  let { error } = await sb.from('ratings').upsert(row);
-  if (error && /season/i.test(error.message)) { delete row.season; ({ error } = await sb.from('ratings').upsert(row)); } // before the seasons update is installed
+  const { error } = await sb.from('ratings').upsert(row);
   if (error) { el.disabled = false; throw error; }
   await sb.from('watchlist').update({ watched_at: new Date().toISOString() }).eq('title_id', titleId).is('watched_at', null);
   toast('Saved');
@@ -922,8 +909,7 @@ async function ensureTitle(id) {
   if (data) return data;
   const t = searchCache.get(id);
   if (!t) return null;
-  const { error } = await sb.from('titles').insert(t);
-  if (error && /genres/.test(error.message)) { const { genres, ...rest } = t; await sb.from('titles').insert(rest); } // before migration 013
+  await sb.from('titles').insert(t);
   return t;
 }
 async function viewAdd() {
@@ -979,106 +965,14 @@ actions.chooseTitle = async (d) => {
 };
 actions.backToAdd = () => viewAdd();
 
-// ---------------------------------------------------------------- quick-pick
-
-async function buildRound() {
-  const [{ data: mineR }, { data: skips }, { data: friendR }] = await Promise.all([
-    sb.from('ratings').select('title_id').eq('user_id', state.me.id),
-    sb.from('quickpick_skips').select('title_id'),
-    sb.from('ratings').select('user_id, title_id, rating, titles(*)').neq('user_id', state.me.id).in('rating', POSITIVE).order('activity_at', { ascending: false }).limit(200),
-  ]);
-  const done = new Set([...(mineR ?? []), ...(skips ?? [])].map((r) => r.title_id));
-  const lovedBy = new Map();
-  for (const r of friendR ?? []) if (!lovedBy.has(r.title_id)) lovedBy.set(r.title_id, r);
-
-  // Friends' titles first (streaming only), then current popular + classics.
-  const friendTitles = [...lovedBy.values()].map((r) => r.titles).filter((t) => t && !done.has(t.id));
-  await loadProviders(friendTitles.map((t) => t.id));
-  const cards = friendTitles.filter((t) => state.providers.get(t.id)?.flatrate?.length);
-
-  if (!state.services) state.services = (await fn('services')).services;
-  const svc = myServices().length ? myServices() : state.services.slice(0, 12).flatMap((s) => s.ids);
-  for (let page = state.qp?.page ?? 1; cards.length < ROUND && page < 6; page++) {
-    const { now, classic } = await fn('discover', { providers: svc, page });
-    const mix = [];
-    for (let i = 0; mix.length < 30 && (i < now.length || i < classic.length); i++) {
-      if (now[i * 2]) mix.push(now[i * 2]);
-      if (now[i * 2 + 1]) mix.push(now[i * 2 + 1]);
-      if (classic[i]) mix.push(classic[i]);
-    }
-    for (const t of mix) if (!done.has(t.id) && !cards.some((c) => c.id === t.id)) cards.push(t);
-    state.qp = { ...(state.qp ?? {}), page: page + 1 };
-  }
-  const round = cards.slice(0, ROUND);
-  await loadProviders(round.map((t) => t.id));
-  state.qp = { ...state.qp, cards: round, i: 0, lovedBy };
-}
-
-async function viewQuickpick() {
-  if (!state.qp?.cards || state.qp.i >= state.qp.cards.length) {
-    if (state.qp?.cards && state.qp.i >= state.qp.cards.length) return roundDone();
-    $app.innerHTML = loader('Finding titles…');
-    await buildRound();
-  }
-  const { cards, i, lovedBy } = state.qp;
-  if (!cards.length) return roundDone();
-  const t = cards[i], friend = lovedBy.get(t.id);
-  $app.innerHTML = `
-    <div class="spread"><h1>Quick-pick</h1><span class="muted">${i + 1} of ${cards.length}</span></div>
-    <div class="progress"><div style="width:${(i / cards.length) * 100}%"></div></div>
-    <div class="card qp-card">
-      ${poster(t.poster_path, 'xl')}
-      <div class="title">${esc(t.name)}</div>
-      <span class="muted">${kind(t)}</span>
-      ${watchOn(t.id)}
-      ${friend ? `<span class="muted">${RATING[friend.rating]} by ${esc(nameOf(friend.user_id))}</span>` : ''}
-    </div>
-    <div class="ratings">${Object.entries(RATING).map(([k, v]) => `<button data-act="qpRate" data-val="${k}">${v}</button>`).join('')}</div>
-    <button class="big" data-act="qpSkip">Haven’t seen it</button>
-    ${friend ? `<button class="link" data-act="qpSave">+ Want to watch instead</button>` : ''}`;
-}
-actions.qpRate = async (d) => {
-  const t = state.qp.cards[state.qp.i];
-  await sb.from('ratings').upsert({ user_id: state.me.id, title_id: t.id, rating: d.val, source: 'quickpick' });
-  state.qp.i++; viewQuickpick();
-};
-actions.qpSkip = async () => {
-  const t = state.qp.cards[state.qp.i];
-  await sb.from('quickpick_skips').upsert({ user_id: state.me.id, title_id: t.id }, { ignoreDuplicates: true });
-  state.qp.i++; viewQuickpick();
-};
-actions.qpSave = async () => {
-  const t = state.qp.cards[state.qp.i], f = state.qp.lovedBy.get(t.id);
-  await sb.from('quickpick_skips').upsert({ user_id: state.me.id, title_id: t.id }, { ignoreDuplicates: true });
-  await sb.from('watchlist').upsert({ user_id: state.me.id, title_id: t.id, watched_at: null });
-  if (f) await sb.from('watchlist_credits').upsert({ user_id: state.me.id, title_id: t.id, recommender_id: f.user_id }, { ignoreDuplicates: true });
-  toast('Saved to your list');
-  state.qp.i++; viewQuickpick();
-};
-
-async function roundDone() {
-  if (!state.me.onboarded) {
-    await sb.from('profiles').update({ onboarded: true }).eq('id', state.me.id);
-    state.me.onboarded = true;
-  }
-  $app.innerHTML = `
-    <h1>Round done</h1>
-    <p class="muted">Your ratings help match you with friends. Add a note on any title to share it in friends’ feeds.</p>
-    <button class="primary big" data-act="qpMore">Keep going</button>
-    <a class="btn big" href="#/feed">Go to the feed</a>`;
-}
-actions.qpMore = () => { state.qp = { page: state.qp?.page }; viewQuickpick(); };
-
 // ---------------------------------------------------------------- want to watch
 
 // My list: Watching, Want to watch, Watched. Watching and Want to watch are private to you.
 const LIST_WATCHED_MAX = 10;
 async function viewList() {
   const cols = 'title_id, added_at, titles(*), watchlist_credits(recommender_id)';
-  let { data: rows, error } = await sb.from('watchlist').select(cols + ', started_at')
+  const { data: rows } = await sb.from('watchlist').select(cols + ', started_at')
     .is('watched_at', null).order('added_at', { ascending: false });
-  const canStart = !error; // false until migration 011 adds started_at
-  if (error) ({ data: rows } = await sb.from('watchlist').select(cols).is('watched_at', null).order('added_at', { ascending: false }));
   const { data: watched, count: nWatched } = await sb.from('ratings')
     .select('title_id, rating, note, season, activity_at, titles(*)', { count: 'exact' })
     .eq('user_id', state.me.id).order('activity_at', { ascending: false }).limit(LIST_WATCHED_MAX);
@@ -1104,15 +998,15 @@ async function viewList() {
   $app.innerHTML = `
     <h1>My list</h1>
     ${filterBar('list')}
-    ${canStart ? `${head('Watching', watching.length)}
+    ${head('Watching', watching.length)}
     ${watching.length ? watching.map((r) => card(r,
       `<button class="primary" data-act="watched" data-id="${esc(r.title_id)}">Write review</button>
        <button data-act="stopWatching" data-id="${esc(r.title_id)}">Not watching</button>`,
       `${kind(r.titles)} · started ${when(r.started_at)}`)).join('')
-      : `<p class="muted">${filtered ? 'Nothing here with these filters.' : 'Tap <b>Watching</b> on anything below.'}</p>`}` : ''}
+      : `<p class="muted">${filtered ? 'Nothing here with these filters.' : 'Tap <b>Watching</b> on anything below.'}</p>`}
     ${head('Want to watch', want.length)}
     ${want.length ? want.map((r) => card(r,
-      `${canStart ? `<button class="primary" data-act="startWatching" data-id="${esc(r.title_id)}">Watching</button>` : ''}
+      `<button class="primary" data-act="startWatching" data-id="${esc(r.title_id)}">Watching</button>
        <button data-act="watched" data-id="${esc(r.title_id)}">Write review</button>`,
       from(r))).join('')
       : `<p class="muted">${filtered ? 'Nothing here with these filters. Try “All”.' : 'Nothing saved yet. Tap “+ Want to watch” on a friend’s pick.'}</p>`}
@@ -1185,7 +1079,7 @@ async function viewMe() {
       <a class="item me-link" href="#/friend/${state.me.id}">${ME_ICONS.picks}<span class="me-label">My picks</span><span class="muted me-sum" id="mePicksSum"></span><span class="muted">›</span></a>
       ${meRow('meSvc', 'services', 'My services', `<p class="muted">Used for the My services filter and highlights.</p><div class="row" id="svc">${state.services ? serviceChips('toggleMySvc') : '<span class="muted">Loading…</span>'}</div>`)}
       ${meRow('meInv', 'invite', 'Invites', `<button class="primary big" data-act="invite">Invite someone</button><div id="inviteBox"></div><div id="meInvLink"></div>`, ' hidden')}
-      ${state.followsReady ? `<a class="item me-link" href="#/following">${ME_ICONS.following}<span class="me-label">Following</span><span class="muted me-sum">${state.following.size} ${state.following.size === 1 ? 'person' : 'people'}</span><span class="muted">›</span></a>` : ''}
+      <a class="item me-link" href="#/following">${ME_ICONS.following}<span class="me-label">Following</span><span class="muted me-sum">${state.following.size} ${state.following.size === 1 ? 'person' : 'people'}</span><span class="muted">›</span></a>
       <div class="item me-link" id="meFace" hidden></div>
       <div class="item me-link">${ME_ICONS.email}<span class="me-label">Weekly email <span class="muted">(Sundays)</span></span><button class="chip ${state.me.weekly_email ? 'on' : ''}" data-act="toggleEmail">${state.me.weekly_email ? 'On' : 'Off'}</button></div>
     </div>
@@ -1365,9 +1259,7 @@ actions.saveName = async () => {
 async function insertInvite(forName) {
   const row = { created_by: state.me.id };
   if (forName) row.for_name = forName.slice(0, 80);
-  let res = await sb.from('invites').insert(row).select('code').single();
-  if (res.error && /for_name/.test(res.error.message)) { delete row.for_name; res = await sb.from('invites').insert(row).select('code').single(); } // before migration 011
-  return res;
+  return sb.from('invites').insert(row).select('code').single();
 }
 // Only blame the 10-link limit when that's what refused it (a row-level security refusal); hosts have no limit (migration 016).
 function inviteError(error) {
@@ -1430,6 +1322,15 @@ actions.shareInvite = async () => {
   else await actions.copyInvite();
 };
 actions.copyInvite = async () => { await navigator.clipboard.writeText(document.getElementById('inviteUrl').value); toast('Link copied'); };
+actions.unsubscribe = async (d, el) => {
+  el.disabled = true;
+  const res = await fetch(`${SUPABASE_URL}/functions/v1/digest?u=${encodeURIComponent(d.u)}&t=${encodeURIComponent(d.t)}`, { method: 'POST' }).catch(() => null);
+  if (state.me && res?.ok) state.me.weekly_email = false;
+  history.replaceState(null, '', '#/feed');
+  $app.innerHTML = res?.ok
+    ? `<section><h1>Sunday email off</h1><p>You won’t get the Sunday email anymore. To turn it back on, go to your Me page and set <b>Weekly email</b> to <b>On</b>.</p><p><a class="btn primary big" href="#/feed">Open TV Rex</a></p></section>`
+    : `<section><h1>That didn’t work</h1><p>Turn the Sunday email off on your Me page instead: <b>Weekly email</b>, then <b>Off</b>.</p><p><a class="btn primary big" href="#/feed">Open TV Rex</a></p></section>`;
+};
 actions.signOut = async () => {
   localStorage.removeItem('tv_invite'); localStorage.removeItem(feedKey());
   await sb.auth.signOut();
@@ -1500,8 +1401,7 @@ actions.resolveFeedback = async (d, el) => {
 
 async function loadMyInvites() {
   const cols = 'code, created_at, used_by, used_at, expires_at';
-  let { data, error } = await sb.from('invites').select(cols + ', for_name').eq('created_by', state.me.id).order('created_at', { ascending: false });
-  if (error) ({ data } = await sb.from('invites').select(cols).eq('created_by', state.me.id).order('created_at', { ascending: false })); // before migration 011
+  const { data } = await sb.from('invites').select(cols + ', for_name').eq('created_by', state.me.id).order('created_at', { ascending: false });
   return data ?? [];
 }
 const inviteState = (i) => i.used_by ? 'joined' : new Date(i.expires_at) > new Date() ? 'pending' : 'expired';
@@ -1577,7 +1477,7 @@ function friendSummary(id, p, rs) {
   $app.innerHTML = `
     <a href="javascript:history.back()">← Back</a>
     <div class="spread"><h1>${esc(isMe(id) ? 'My picks' : p.name)}</h1>
-      ${!isMe(id) && state.followsReady ? followButton(id) : ''}</div>
+      ${!isMe(id) ? followButton(id) : ''}</div>
     <div class="stats">${stat(rs.length, rs.length === 1 ? 'Rating' : 'Ratings', 'all')}${stat(of('loved').length, 'Loved', 'loved')}${stat(of('liked').length, 'Liked', 'liked')}</div>
     ${rs.length ? `<div class="spread shelf-head"><h2>Recently rated</h2><a class="small" href="${base}/all">See all</a></div>${shelf(rs, `${base}/all`)}` : '<p class="empty">Nothing rated yet.</p>'}
     ${section('loved', 'Loved')}

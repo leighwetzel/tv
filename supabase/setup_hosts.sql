@@ -2,7 +2,7 @@
 -- Paste into Supabase > SQL Editor and Run.
 
 update public.profiles set is_host = true
-where id = (select id from auth.users where lower(email) = 'leigh.wetzel@gmail.com');
+where id = (select id from auth.users where lower(email) = 'YOUR-EMAIL-HERE');
 
 -- Check: should list Leigh with is_host = true.
 select p.name, u.email, p.is_host
