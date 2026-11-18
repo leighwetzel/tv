@@ -279,7 +279,7 @@ async function buildEmail(person: any, picks: Awaited<ReturnType<typeof picksFor
   </td></tr>
   <tr><td style="padding:28px 16px 32px;font-family:${FONT};font-size:15px;line-height:1.4;color:${C.muted}">
     <div style="border-top:1px solid ${C.line};padding-top:20px">You get this on Sundays when there are new picks from people you follow, or popular ones you haven't seen. Nothing new, no email.</div>
-    <div style="padding-top:8px"><a href="${esc(unsubLink)}" style="color:${C.blue}">Stop these emails</a> · <a href="${esc(link('', 'footer'))}" style="color:${C.blue}">tv.xoleigh.com</a></div>
+    <div style="padding-top:8px"><a href="${esc(unsubLink)}" style="color:${C.blue}">Unsubscribe</a> · <a href="${esc(link('', 'footer'))}" style="color:${C.blue}">tv.xoleigh.com</a></div>
     <div style="padding-top:8px">Streaming info from JustWatch.</div>
   </td></tr>
 </table></td></tr></table></body></html>`;
@@ -289,7 +289,7 @@ async function buildEmail(person: any, picks: Awaited<ReturnType<typeof picksFor
     ...all.map((p) => [`${p.title.name} (${p.title.media_type === 'tv' ? 'TV' : 'Movie'})${(services.get(p.title.id) ?? []).length ? ' · ' + services.get(p.title.id)!.join(', ') : ''}`,
       ...p.reviews.map((r) => `  ${names.get(r.user_id)?.name || 'Someone'} ${WORD[r.rating]}${r.note ? ': ' + r.note : ''}`),
       `  ${link(`/title/${encodeURIComponent(p.title.id)}`, 'text-title')}`, ''].join('\n')),
-    `Open TV Rex: ${link('', 'text-open-app')}`, `Stop these emails: ${unsubLink}`,
+    `Open TV Rex: ${link('', 'text-open-app')}`, `Unsubscribe: ${unsubLink}`,
   ].join('\n');
 
   return { subject, html, text, unsub, titleIds: all.map((p) => p.title.id) };
