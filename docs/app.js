@@ -464,6 +464,7 @@ async function viewInvite() {
         <a class="btn primary big" href="#/request">Request an invite</a>
       </div>` : `<div class="card invite-card">
         <div class="inviter">${name ? avatar(inv.inviter_id, inv) : ''}<h2>${name ? `${esc(name)} invited you` : 'You’re invited to TV Rex'}</h2></div>
+        ${inv.is_host ? '<p>I made this app to share TV recommendations with friends.</p>' : ''}
         <a class="btn primary big" href="#/signin">Join TV Rex</a>
       </div>`}
     <h2>What you get</h2>
