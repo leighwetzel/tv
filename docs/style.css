@@ -272,6 +272,7 @@ nav a .dot { position: absolute; top: 6px; left: calc(50% + 9px); width: 12px; h
 .invite-card { display: flex; flex-direction: column; gap: 14px; padding: 20px; }
 .invite-card h2 { margin: 0; font-size: calc(var(--base) + 7px); line-height: 1.15; }
 .inviter { display: flex; align-items: center; gap: 12px; }
+.host-note { line-height: 1.35; } /* host's own links: a note beside her photo instead of "Leigh invited you" */
 .inviter .avatar { width: 56px; height: 56px; margin: 0; font-size: calc(var(--base) + 4px); }
 .whys { padding: 0; }
 .why { display: flex; gap: 14px; padding: 16px; border-top: 1px solid var(--line); }

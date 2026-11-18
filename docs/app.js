@@ -463,8 +463,8 @@ async function viewInvite() {
         <p class="muted">Ask ${name ? esc(name) : 'the person who invited you'} for a new link, or request one.</p>
         <a class="btn primary big" href="#/request">Request an invite</a>
       </div>` : `<div class="card invite-card">
-        <div class="inviter">${name ? avatar(inv.inviter_id, inv) : ''}<h2>${name ? `${esc(name)} invited you` : 'You’re invited to TV Rex'}</h2></div>
-        ${inv.is_host ? '<p>I made this app to share TV recommendations with friends.</p>' : ''}
+        <div class="inviter">${name ? avatar(inv.inviter_id, inv) : ''}${inv.is_host ? '<p class="host-note">I made this app to share TV recommendations with friends.</p>'
+          : `<h2>${name ? `${esc(name)} invited you` : 'You’re invited to TV Rex'}</h2>`}</div>
         <a class="btn primary big" href="#/signin">Join TV Rex</a>
       </div>`}
     <h2>What you get</h2>
