@@ -163,6 +163,7 @@ a.more { align-self: flex-start; min-height: 44px; display: inline-flex; align-i
 .about-head h1 { font-weight: 700; }
 .about-head .muted { margin-top: 4px; }
 .about-card { padding: 16px; display: flex; flex-direction: column; gap: 10px; }
+.about-version { flex-direction: row; justify-content: space-between; align-items: baseline; gap: 12px; }
 .about-section { display: flex; flex-direction: column; gap: 8px; }
 .section-label { margin: 8px 0 0 4px; font-size: calc(var(--base) - 3px); color: var(--muted); text-transform: uppercase; letter-spacing: .02em; }
 .about-credits p:first-child { font-size: calc(var(--base) - 1px); line-height: 1.45; }
