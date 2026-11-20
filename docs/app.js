@@ -423,7 +423,7 @@ const HELP = [
     ['How do I add something I watched?', 'Tap <b>Search</b> at the bottom. Type the name, tap the right show or movie, pick a rating, and add a note if you like.'],
     ['What do the ratings mean?', '<b>Loved</b> and <b>Liked</b> show up in everyone’s feed. <b>Didn’t like</b> and <b>Gave up</b> only show next to other people’s reviews of the same title, so they never start a new card.'],
     ['Where can I watch it?', 'Look for <b>Watch on</b> on each card. Services you’ve picked in <b>Me</b> are highlighted in blue. Streaming info is from JustWatch, for the US.'],
-    ['How do I save something for later?', 'Tap <b>+ Want to watch</b>. It goes to <b>My list</b> at the bottom of the screen.'],
+    ['How do I save something for later?', 'Tap <b>+ Want to watch</b>. It goes to <b>My list</b> at the bottom of the screen. Once you rate it, it moves to <b>My ratings</b> on the <b>Me</b> page.'],
     ['What does “Seen it” do?', 'It lets you rate a title right from the card, without opening it.'],
     ['How do I change or remove my review?', 'Open the show or movie and tap <b>Edit</b> next to your rating.'],
   ]],
@@ -926,7 +926,7 @@ actions.saveRating = async (d, el) => {
   const { error } = await sb.from('ratings').upsert(row);
   if (error) { el.disabled = false; throw error; }
   await sb.from('watchlist').update({ watched_at: new Date().toISOString() }).eq('title_id', titleId).is('watched_at', null);
-  toast('Saved');
+  toast(form.dataset.source === 'watchlist' ? 'Saved to My ratings' : 'Saved');
   if (form.dataset.after && form.dataset.after !== location.hash) location.hash = form.dataset.after; else route();
 };
 
@@ -1023,17 +1023,16 @@ actions.chooseTitle = async (d) => {
 
 // ---------------------------------------------------------------- want to watch
 
-// My list: Watching, Want to watch, Watched. Watching and Want to watch are private to you.
-const LIST_WATCHED_MAX = 10;
+// My list: what's ahead (Watching, Want to watch), all private to you. What you've rated lives in
+// My ratings on Me (Nov 20); a row at the bottom links there.
 async function viewList() {
   const cols = 'title_id, added_at, titles(*), watchlist_credits(recommender_id)';
   const { data: rows } = await sb.from('watchlist').select(cols + ', started_at')
     .is('watched_at', null).order('added_at', { ascending: false });
-  const { data: watched, count: nWatched } = await sb.from('ratings')
-    .select('title_id, rating, note, season, activity_at, titles(*)', { count: 'exact' })
-    .eq('user_id', state.me.id).order('activity_at', { ascending: false }).limit(LIST_WATCHED_MAX);
+  const { count: nWatched } = await sb.from('ratings')
+    .select('title_id', { count: 'exact', head: true }).eq('user_id', state.me.id);
   let items = rows ?? [];
-  await loadProviders([...items.map((r) => r.title_id), ...(watched ?? []).map((r) => r.title_id)]);
+  await loadProviders(items.map((r) => r.title_id));
   if (state.listType !== 'all') items = items.filter((r) => r.titles.media_type === state.listType);
   if (state.listGenre !== 'all') { await fillGenres(items.map((r) => r.titles)); items = items.filter((r) => inGenre(r.titles, state.listGenre)); }
   if (state.listSvc === 'mine') items = items.filter((r) => onMyServices(r.title_id));
@@ -1067,14 +1066,8 @@ async function viewList() {
        <button data-act="watched" data-id="${esc(r.title_id)}">Write review</button>`,
       from(r))).join('')
       : `<p class="muted">${filtered ? 'Nothing here with these filters. Try “All”.' : 'Nothing saved yet. Tap “+ Want to watch” on a friend’s pick.'}</p>`}
-    ${head('Watched', nWatched ?? 0, (nWatched ?? 0) > LIST_WATCHED_MAX ? `<a class="small" href="#/friend/${state.me.id}/all">See all</a>` : '')}
-    ${watched?.length ? watched.map((r) => `<div class="card pick-card"><div class="pick">
-      <a href="${titleLink(r.titles)}">${poster(r.titles.poster_path, 'sm')}</a>
-      <div class="pick-body"><a class="title" href="${titleLink(r.titles)}">${esc(r.titles.name)}</a>
-        <span class="muted"><strong>${ratingLabel(r)}</strong> · ${when(r.activity_at)}</span>
-        ${r.note ? `<div class="note clamp">${esc(r.note)}</div><button class="link small readmore" data-act="readMore" hidden>Read more</button>` : ''}</div></div></div>`).join('')
-      : '<p class="muted">Nothing rated yet. Tap Search to find and rate a show.</p>'}
-    ${(nWatched ?? 0) > LIST_WATCHED_MAX ? `<a class="btn big" href="#/friend/${state.me.id}/all">See all ${nWatched} watched</a>` : ''}`;
+    ${nWatched ? `<div class="list" style="margin-top:24px"><a class="item" href="#/friend/${state.me.id}"><span>Watched</span><span class="muted">${nWatched} ›</span></a></div>
+      <p class="muted small">Once you rate something, it moves to My ratings on the Me page.</p>` : ''}`;
 }
 actions.startWatching = async (d) => {
   const { error } = await sb.from('watchlist').update({ started_at: new Date().toISOString() }).eq('user_id', state.me.id).eq('title_id', d.id);
