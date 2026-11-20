@@ -394,6 +394,21 @@ async function redeemPendingInvite() {
 }
 
 // ---------------------------------------------------------------- help
+// How to save TV Rex like an app. Desktop steps differ from iPhone and iPad (Nov 20).
+const SAVE_STEPS = {
+  ios: 'In Safari, tap the Share button, then <b>Add to Home Screen</b>, then <b>Add</b>.',
+  mac: 'Choose <b>File</b> › <b>Add to Dock</b> in the menu bar (or click the Share button, then <b>Add to Dock</b>), then click <b>Add</b>.',
+  chrome: 'Click the three dots at the top right, then <b>Cast, save, and share</b> › <b>Install page as app</b>, then <b>Install</b>.',
+};
+// Which steps fit this device. iPads report themselves as Macs, so touch tells them apart.
+function saveTip() {
+  const ua = navigator.userAgent;
+  const ios = /iPhone|iPad|iPod/.test(ua) || (/Macintosh/.test(ua) && navigator.maxTouchPoints > 1);
+  if (ios) return `on iPhone or iPad, tap Share → Add to Home Screen to keep TV Rex one tap away.`;
+  if (/Chrome\//.test(ua) && !/Edg\/|OPR\/|Mobile/.test(ua)) return `in Chrome, click the three dots at the top right, then Cast, save, and share › Install page as app, to keep TV Rex one click away.`;
+  if (/Macintosh/.test(ua) && /Safari\//.test(ua)) return `in Safari, choose File › Add to Dock to keep TV Rex one click away.`;
+  return `save TV Rex to your home screen or bookmarks to keep it one tap away. See Help for steps.`;
+}
 const HELP_EMAIL = ''; // shown as "Still stuck? Email …" when set
 // Each group is for people signed out ('out'), signed in ('in'), or both. Tips are split per question.
 const HELP = [
@@ -420,7 +435,7 @@ const HELP = [
   ]],
   ['Tips', 'both', [
     ['How do I turn on Face ID?', 'Go to <b>Me</b> and tap <b>Turn on</b> next to Sign in with Face ID. Next time TV Rex asks you to sign in, tap <b>Sign in with Face ID</b> and look at your phone.', 'in'],
-    ['How do I put TV Rex on my Home Screen?', 'In Safari, tap the Share button, then <b>Add to Home Screen</b>, then <b>Add</b>. Open TV Rex from the new icon and sign in once.'],
+    ['How do I keep TV Rex one tap away?', `<b>iPhone or iPad:</b> ${SAVE_STEPS.ios}<br><br><b>Mac, in Safari:</b> ${SAVE_STEPS.mac}<br><br><b>Computer, in Chrome:</b> ${SAVE_STEPS.chrome}<br><br>Open TV Rex from the new icon and sign in once.`],
     ['How do I make the text bigger?', 'TV Rex keeps its text at one size on every iPhone and iPad, so the iPhone’s Text Size setting doesn’t change it. If you open TV Rex in Safari (not from the home-screen icon), you can tap <b>aA</b> in the address bar and tap the larger A.'],
   ]],
 ];
@@ -551,7 +566,7 @@ async function viewWelcome() {
     <h2>Which streaming services do you have?</h2>
     <div class="row" id="svc">${serviceChips('toggleSvc')}</div>
     <button class="primary big" data-act="finishWelcome">Done</button>
-    <p class="muted">Tip: on iPhone or iPad, tap Share → Add to Home Screen to keep TV Rex one tap away.</p>`;
+    <p class="muted">Tip: ${saveTip()}</p>`;
 }
 function serviceChips(act) {
   return state.services.map((s) => {
@@ -947,7 +962,8 @@ async function viewAdd() {
   $app.innerHTML = `
     <h1>Search</h1>
     <div class="field"><label for="q">Search any show or movie</label>
-      <input id="q" type="search" autocomplete="off" placeholder="e.g. Slow Horses"></div>
+      <div class="search-wrap"><input id="q" type="search" autocomplete="off" placeholder="e.g. Slow Horses">
+        <button type="button" class="search-clear" id="qClear" aria-label="Clear search" hidden><svg aria-hidden="true" viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18"/></svg></button></div></div>
     <div id="intro">
       <p class="muted intro-head">What you can do here</p>
       <div class="list intro">
@@ -959,8 +975,12 @@ async function viewAdd() {
     <div id="results"></div>`;
   const q = document.getElementById('q');
   q.focus();
+  const clear = document.getElementById('qClear');
+  // Clears the box and the remembered search, so the explainer comes back (Nov 20).
+  clear.onclick = () => { q.value = ''; q.oninput(); q.focus(); };
   q.oninput = () => {
     state.searchQ = q.value;
+    clear.hidden = !q.value;
     // The explainer is for an empty box; it steps aside once you start searching.
     document.getElementById('intro').hidden = q.value.trim().length >= 2;
     clearTimeout(searchTimer);
@@ -1121,7 +1141,7 @@ async function viewMe() {
           <input type="file" id="photoInput" accept="image/*" hidden>
           ${state.me.avatar_url ? '<button class="link small" data-act="removePhoto">Remove photo</button>' : ''}
         </div>`)}
-      <a class="item me-link" href="#/friend/${state.me.id}">${ME_ICONS.picks}<span class="me-label">My picks</span><span class="muted me-sum" id="mePicksSum"></span><span class="muted">›</span></a>
+      <a class="item me-link" href="#/friend/${state.me.id}">${ME_ICONS.picks}<span class="me-label">My ratings</span><span class="muted me-sum" id="mePicksSum"></span><span class="muted">›</span></a>
       ${meRow('meSvc', 'services', 'My services', `<p class="muted">Used for the My services filter and highlights.</p><div class="row" id="svc">${state.services ? serviceChips('toggleMySvc') : '<span class="muted">Loading…</span>'}</div>`)}
       ${meRow('meInv', 'invite', 'Invites', `<button class="primary big" data-act="invite">Invite someone</button><div id="inviteBox"></div><div id="meInvLink"></div>`, ' hidden')}
       <a class="item me-link" href="#/following">${ME_ICONS.following}<span class="me-label">Following</span><span class="muted me-sum">${state.following.size} ${state.following.size === 1 ? 'person' : 'people'}</span><span class="muted">›</span></a>
@@ -1545,7 +1565,7 @@ function friendSummary(id, p, rs) {
   const section = (k, label) => of(k).length ? `<div class="spread shelf-head"><h2>${label}</h2><a class="small" href="${base}/${k}">See all ${of(k).length}</a></div>${shelf(of(k), `${base}/${k}`)}` : '';
   $app.innerHTML = `
     <a href="javascript:history.back()">← Back</a>
-    <div class="spread"><h1>${esc(isMe(id) ? 'My picks' : p.name)}</h1>
+    <div class="spread"><h1>${esc(isMe(id) ? 'My ratings' : p.name)}</h1>
       ${!isMe(id) ? followButton(id) : ''}</div>
     <div class="stats">${stat(rs.length, rs.length === 1 ? 'Rating' : 'Ratings', 'all')}${stat(of('loved').length, 'Loved', 'loved')}${stat(of('liked').length, 'Liked', 'liked')}</div>
     ${rs.length ? `<div class="spread shelf-head"><h2>Recently rated</h2><a class="small" href="${base}/all">See all</a></div>${shelf(rs, `${base}/all`)}` : '<p class="empty">Nothing rated yet.</p>'}
@@ -1569,7 +1589,7 @@ async function friendList(id, p, all, filter, limit = PAGE, mineToo = null) {
   const heading = { all: 'All ratings', loved: 'Loved', liked: 'Liked', didnt_like: 'Didn’t like', gave_up: 'Gave up', mixed: 'Didn’t like or gave up' }[filter] ?? 'All ratings';
   await loadProviders(shown.map((r) => r.title_id));
   $app.innerHTML = `
-    <a href="#/friend/${encodeURIComponent(id)}">← ${esc(isMe(id) ? 'My picks' : p.name)}</a>
+    <a href="#/friend/${encodeURIComponent(id)}">← ${esc(isMe(id) ? 'My ratings' : p.name)}</a>
     <div><h1>${heading}</h1><span class="muted">${matching.length} title${matching.length === 1 ? '' : 's'}</span></div>
     ${shown.length ? shown.map((r) => `<div class="card pick-card"><div class="pick">
       <a href="${titleLink(r.titles)}">${poster(r.titles.poster_path, 'sm')}</a>
