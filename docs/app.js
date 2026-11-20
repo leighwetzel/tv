@@ -226,7 +226,7 @@ function watchOn(id) {
 
 const routes = {
   feed: viewFeed, title: viewTitle, add: viewAdd,
-  list: viewList, me: viewMe, invites: viewInvites, feedback: viewFeedback, friend: viewFriend, welcome: viewWelcome, about: viewAbout, following: viewFollowing, passkey: viewPasskey, help: viewHelp,
+  list: viewList, me: viewMe, invites: viewInvites, members: viewMembers, feedback: viewFeedback, friend: viewFriend, welcome: viewWelcome, about: viewAbout, following: viewFollowing, passkey: viewPasskey, help: viewHelp,
 };
 
 async function route() {
@@ -1172,7 +1172,7 @@ async function viewMe() {
   set('meCount', `${nRatings ?? 0} rating${nRatings === 1 ? '' : 's'}`);
   // Hosts only: how many people have joined (members see every member, so this counts them all).
   if (state.me.is_host) sb.from('profiles').select('id', { count: 'exact', head: true }).eq('is_member', true)
-    .then(({ count }) => { if (live() && count != null) set('meMembers', `${count} member${count === 1 ? '' : 's'}`); });
+    .then(({ count }) => { if (live() && count != null) set('meMembers', `<a href="#/members">${count} member${count === 1 ? '' : 's'} ›</a>`); });
   set('mePicksSum', nRatings ? String(nRatings) : '');
   if (state.services) { set('svc', serviceChips('toggleMySvc')); set('meSvcSum', svcSummary()); }
 
@@ -1522,6 +1522,32 @@ async function viewInvites(group) {
       ? `<a class="item" href="#/friend/${encodeURIComponent(i.used_by)}"><span class="row" style="flex-wrap:nowrap">${avatar(i.used_by)}<span>${esc(nameOf(i.used_by))}<br><span class="muted">Joined ${when(i.used_at)}</span></span></span><span class="muted">›</span></a>`
       : `<div><strong>${i.for_name ? esc(i.for_name) : 'Someone'}</strong><br><span class="muted">Joined ${when(i.used_at)}${state.people.has(i.used_by) ? ' · hasn’t finished signing up' : ''}</span></div>`).join('')}</div>` : ''}`;
   // A new account has a blank name until Welcome is finished (migration 004), so fall back to the invite's "who's it for" name.
+}
+
+// Members (hosts only, Nov 20): everyone who has joined, newest first, grouped by month,
+// with email and who invited them. host_members() returns nothing for non-hosts (migration 020).
+async function viewMembers() {
+  if (!state.me.is_host) { location.hash = '#/me'; return; }
+  const { data, error } = await sb.rpc('host_members');
+  if (error) { console.error('host_members', error); $app.innerHTML = '<a href="#/me">← Me</a><p class="empty">Couldn’t load members. Run migration 020 in Supabase.</p>'; return; }
+  const rows = data ?? [];
+  const month = (ts) => new Date(ts).toLocaleDateString('en-US', { month: 'long', year: new Date(ts).getFullYear() === new Date().getFullYear() ? undefined : 'numeric' });
+  const day = (ts) => new Date(ts).toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+  const by = (m) => m.is_host && !m.invited_by ? 'host' : !m.invited_by ? 'no invite' : isMe(m.invited_by) ? 'invited by you' : `invited by ${esc(m.invited_by_name || 'someone')}`;
+  const groups = [];
+  for (const m of rows) { const k = month(m.joined_at); if (groups.at(-1)?.k !== k) groups.push({ k, list: [] }); groups.at(-1).list.push(m); }
+  const row = (m) => {
+    const done = m.onboarded && m.name;
+    const name = esc(m.name || m.for_name || 'Someone') + (isMe(m.id) ? ' (you)' : '');
+    const lines = `<span>${name}<br><span class="muted small">Joined ${day(m.joined_at)} · ${by(m)}${done ? '' : ' · hasn’t finished signing up'}</span><br><span class="muted small">${esc(m.email)}</span></span>`;
+    return done
+      ? `<a class="item" href="#/friend/${encodeURIComponent(m.id)}"><span class="row" style="flex-wrap:nowrap">${avatar(m.id, state.people.get(m.id) ?? m)}${lines}</span><span class="muted">›</span></a>`
+      : `<div class="item"><span class="row" style="flex-wrap:nowrap">${avatar(m.id, state.people.get(m.id) ?? m)}${lines}</span></div>`;
+  };
+  $app.innerHTML = `
+    <a href="#/me">← Me</a>
+    <div><h1>Members</h1><span class="muted">${rows.length} ${rows.length === 1 ? 'person' : 'people'} · newest first</span></div>
+    ${groups.map((g) => `<h2>${g.k}</h2><div class="list">${g.list.map(row).join('')}</div>`).join('')}`;
 }
 
 // ---------------------------------------------------------------- friend profile
