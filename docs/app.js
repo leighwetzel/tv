@@ -1584,8 +1584,9 @@ function friendSummary(id, p, rs) {
   const section = (k, label) => of(k).length ? `<div class="spread shelf-head"><h2>${label}</h2><a class="small" href="${base}/${k}">See all ${of(k).length}</a></div>${shelf(of(k), `${base}/${k}`)}` : '';
   $app.innerHTML = `
     <a href="javascript:history.back()">← Back</a>
-    <div class="spread"><h1>${esc(isMe(id) ? 'My ratings' : p.name)}</h1>
-      ${!isMe(id) ? followButton(id) : ''}</div>
+    <div class="profile-head">${avatar(id, p).replace('class="avatar"', 'class="avatar lg"')}
+      <div class="profile-name"><h1>${esc(isMe(id) ? 'My ratings' : p.name)}</h1>
+        ${!isMe(id) ? followButton(id) : ''}</div></div>
     <div class="stats">${stat(rs.length, rs.length === 1 ? 'Rating' : 'Ratings', 'all')}${stat(of('loved').length, 'Loved', 'loved')}${stat(of('liked').length, 'Liked', 'liked')}</div>
     ${rs.length ? `<div class="spread shelf-head"><h2>Recently rated</h2><a class="small" href="${base}/all">See all</a></div>${shelf(rs, `${base}/all`)}` : '<p class="empty">Nothing rated yet.</p>'}
     ${section('loved', 'Loved')}
