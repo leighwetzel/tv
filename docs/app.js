@@ -430,7 +430,7 @@ const HELP = [
   ['People', 'in', [
     ['How do I follow someone?', 'Tap their name on any review, then tap <b>+ Follow</b>.'],
     ['Everyone or Following?', '<b>Everyone</b> shows picks from everyone on TV Rex. <b>Following</b> shows only people you follow, plus your own.'],
-    ['How do I invite someone?', 'Go to <b>Me</b>, open <b>Invites</b>, then tap <b>Send link</b>. Your link works for anyone, so you can send it to as many people as you like, or put it in a group chat.'],
+    ['How do I invite someone?', 'Go to <b>Me</b>, open <b>Invites</b>, then tap <b>Send link</b>. Your link works for anyone, so you can send it to as many people as you like, or put it in a group chat. Add their name first and <b>My invites</b> shows who you sent it to.'],
     ['Who can see my picks?', 'Everyone who joined TV Rex by invite can see your name and reviews. Your email, your streaming services and My list stay private.'],
   ]],
   ['Tips', 'both', [
@@ -1320,12 +1320,57 @@ actions.saveName = async () => {
 };
 // Your invite link (migration 021, Nov 22): one per person, works for anyone, never expires.
 // One-person links were hurting sign-ups because people didn't pass them on.
+// Named links (migration 022): add who you're sending it to and My invites shows "Sent to Mom".
+const inviteUrl = (code) => `${location.origin}${location.pathname}?invite=${code}`;
 function personalLink(code) {
-  const url = `${location.origin}${location.pathname}?invite=${code}`;
-  return `<div class="field"><p>Your invite link works for anyone you send it to, as often as you like. Text it, email it, or drop it in a group chat.</p>
-    <input readonly value="${esc(url)}" id="inviteUrl" aria-label="Your invite link">
+  state.myLink = code;
+  return `<div class="field"><p>Your invite link works for anyone, as often as you like. Text it, email it, or drop it in a group chat.</p>
+    <label for="inviteFor">Who are you sending it to? (optional)</label>
+    <input id="inviteFor" maxlength="80" autocomplete="off" placeholder="Their name">
+    <p class="muted small">Only you see this, on My invites.</p>
+    <button class="primary big" data-act="sendLink">Send link</button>
+    <button class="big" data-act="copyLink">Copy link</button></div>`;
+}
+// A name makes its own link; no name uses your personal one.
+async function linkFor() {
+  const forName = document.getElementById('inviteFor')?.value.trim() || '';
+  if (!forName) return { url: inviteUrl(state.myLink) };
+  const { data, error } = await sb.rpc('make_invite_link', { p_for: forName });
+  if (error || !data) { console.error('make_invite_link', error); return { error: true }; }
+  return { url: inviteUrl(data), forName };
+}
+// Sharing right after a network call can be refused on iPhone; then show the link with its own Send button.
+function linkReady(url, forName) {
+  document.getElementById('inviteBox').innerHTML = `<div class="field">
+    <p><strong>Link for ${esc(forName)} is ready.</strong> It works for anyone they pass it to, too.</p>
+    <input readonly value="${esc(url)}" id="inviteUrl" aria-label="Invite link">
     <button class="primary big" data-act="shareInvite">Send link</button>
-    <button class="big" data-act="copyInvite">Copy link</button></div>`;
+    <button class="big" data-act="copyInvite">Copy link</button>
+    <button class="link" data-act="newLink">Send to someone else</button></div>`;
+}
+const shareText = () => state.me.is_host ? 'I made this app to share TV recommendations with friends:' : 'Let’s share what we’re watching on TV Rex:';
+actions.sendLink = async (d, el) => {
+  el.disabled = true;
+  const { url, forName, error } = await linkFor();
+  el.disabled = false;
+  if (error) return toast('Couldn’t make a link. Check your connection and try again.');
+  if (forName) linkReady(url, forName);
+  if (!navigator.share) return forName ? null : copyText(url);
+  const text = shareText();
+  await navigator.share({ title: text.slice(0, -1), text, url }).catch(() => {});
+};
+actions.copyLink = async (d, el) => {
+  el.disabled = true;
+  const { url, forName, error } = await linkFor();
+  el.disabled = false;
+  if (error) return toast('Couldn’t make a link. Check your connection and try again.');
+  if (forName) linkReady(url, forName);
+  await copyText(url);
+};
+actions.newLink = () => { document.getElementById('inviteBox').innerHTML = personalLink(state.myLink); };
+async function copyText(url) {
+  try { await navigator.clipboard.writeText(url); toast('Link copied'); }
+  catch { toast('Tap and hold the link to copy it'); }
 }
 // Before migration 021: one-person links. Each one works once, for 7 days. "Who's it for?" is optional and only you see it.
 async function insertInvite(forName) {
@@ -1391,7 +1436,7 @@ actions.shareInvite = async () => {
   const url = document.getElementById('inviteUrl').value;
   // The phone or computer's share menu where there is one; otherwise copy the link.
   // Hosts (Leigh) get a personal line; everyone else gets the general one.
-  const text = state.me.is_host ? 'I made this app to share TV recommendations with friends:' : 'Let’s share what we’re watching on TV Rex:';
+  const text = shareText();
   if (navigator.share) await navigator.share({ title: text.slice(0, -1), text, url }).catch(() => {});
   else await actions.copyInvite();
 };
@@ -1492,12 +1537,18 @@ actions.resolveFeedback = async (d, el) => {
 
 // ---------------------------------------------------------------- my invites
 
+// Joins (invites rows) plus named links nobody has joined with yet, shown as pending (migration 022).
 async function loadMyInvites() {
-  const cols = 'code, created_at, used_by, used_at, expires_at';
-  const { data } = await sb.from('invites').select(cols + ', for_name').eq('created_by', state.me.id).order('created_at', { ascending: false });
-  return data ?? [];
+  const cols = 'code, created_at, used_by, used_at, expires_at, for_name';
+  let { data, error } = await sb.from('invites').select(cols + ', via_link').eq('created_by', state.me.id).order('created_at', { ascending: false });
+  if (error) ({ data } = await sb.from('invites').select(cols).eq('created_by', state.me.id).order('created_at', { ascending: false })); // before 022
+  const rows = data ?? [];
+  const { data: links } = await sb.from('invite_links').select('code, for_name, created_at').eq('owner', state.me.id).not('for_name', 'is', null);
+  state.sentTo = new Map((links ?? []).map((l) => [l.code, l.for_name]));
+  const unused = (links ?? []).filter((l) => !rows.some((r) => r.via_link === l.code)).map((l) => ({ ...l, named: true }));
+  return [...unused, ...rows].sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
 }
-const inviteState = (i) => i.used_by ? 'joined' : new Date(i.expires_at) > new Date() ? 'pending' : 'expired';
+const inviteState = (i) => i.named ? 'pending' : i.used_by ? 'joined' : new Date(i.expires_at) > new Date() ? 'pending' : 'expired';
 // Expired links drop off on their own (Nov 16); joined people and pending links show.
 function inviteCounts(list) {
   const n = (k) => list.filter((i) => inviteState(i) === k).length;
@@ -1508,11 +1559,13 @@ function expiresIn(ts) {
   return days <= 1 ? 'expires within a day' : `expires in ${days}d`;
 }
 // Open links can be removed (migration 016).
-const removeBtn = (i, live) => `<button class="small" data-act="removeInvite" data-code="${esc(i.code)}" data-live="${live ? 1 : ''}" aria-label="Remove ${i.for_name ? 'link for ' + esc(i.for_name) : 'this link'}">Remove</button>`;
+const removeBtn = (i, live) => `<button class="small" data-act="removeInvite" data-code="${esc(i.code)}" data-named="${i.named ? 1 : ''}" data-live="${live ? 1 : ''}" aria-label="Remove ${i.for_name ? 'link for ' + esc(i.for_name) : 'this link'}">Remove</button>`;
 actions.removeInvite = async (d, el) => {
   if (d.live && !confirm('Remove this link? It will stop working.')) return;
   el.disabled = true;
-  const { error, count } = await sb.from('invites').delete({ count: 'exact' }).eq('code', d.code).is('used_by', null);
+  const { error, count } = d.named
+    ? await sb.from('invite_links').delete({ count: 'exact' }).eq('code', d.code)
+    : await sb.from('invites').delete({ count: 'exact' }).eq('code', d.code).is('used_by', null);
   if (error || !count) { el.disabled = false; console.error('remove invite', error); return toast('Couldn’t remove that link. Try again.'); }
   toast('Link removed');
   route(); // stays on whichever list you were on
@@ -1521,16 +1574,19 @@ async function viewInvites(group) {
   const list = await loadMyInvites();
   if (list.some((i) => i.used_by && !state.people.has(i.used_by))) await loadPeople(); // someone joined since the app opened
   const of = (k) => list.filter((i) => inviteState(i) === k);
-  const forLine = (i) => i.for_name ? `For ${esc(i.for_name)}` : 'Invite link';
+  const forLine = (i) => i.named ? `Sent to ${esc(i.for_name)}` : i.for_name ? `For ${esc(i.for_name)}` : 'Invite link';
+  const pendLine = (i) => i.named ? `Sent ${when(i.created_at)} · not joined yet` : `Made ${when(i.created_at)} · ${expiresIn(i.expires_at)}`;
+  // Who you sent the link to, when that's not the name they chose.
+  const sent = (i) => { const to = state.sentTo?.get(i.via_link) ?? i.for_name; return to && to !== nameOf(i.used_by) ? ` · sent to ${esc(to)}` : ''; };
   const pending = group === 'joined' ? [] : of('pending'), joined = group === 'pending' ? [] : of('joined');
   const title = group === 'pending' ? 'Pending invites' : group === 'joined' ? 'Joined' : 'My invites';
   $app.innerHTML = `
     <a href="#/me">← Me</a>
-    <div><h1>${title}</h1>${group === 'joined' ? '' : '<span class="muted">Expired links drop off this list on their own.</span>'}</div>
-    ${pending.length || joined.length ? '' : `<p class="empty">${group === 'pending' ? 'No pending invites.' : group === 'joined' ? 'No one has joined yet.' : 'No invites yet. Tap Invite someone on Me.'}</p>`}
-    ${pending.length ? `${group ? '' : '<h2>Pending</h2>'}<div class="list">${pending.map((i) => `<div class="spread"><span><strong>${forLine(i)}</strong><br><span class="muted">Made ${when(i.created_at)} · ${expiresIn(i.expires_at)}</span></span>${removeBtn(i, true)}</div>`).join('')}</div>` : ''}
+    <div><h1>${title}</h1>${group === 'joined' ? '' : '<span class="muted">Pending shows links you sent with a name. Remove one to turn it off.</span>'}</div>
+    ${pending.length || joined.length ? '' : `<p class="empty">${group === 'pending' ? 'No pending invites.' : group === 'joined' ? 'No one has joined yet.' : 'No invites yet. Send your link from Me.'}</p>`}
+    ${pending.length ? `${group ? '' : '<h2>Pending</h2>'}<div class="list">${pending.map((i) => `<div class="spread"><span><strong>${forLine(i)}</strong><br><span class="muted">${pendLine(i)}</span></span>${removeBtn(i, true)}</div>`).join('')}</div>` : ''}
     ${joined.length ? `${group ? '' : '<h2>Joined</h2>'}<div class="list">${joined.map((i) => state.people.get(i.used_by)?.name
-      ? `<a class="item" href="#/friend/${encodeURIComponent(i.used_by)}"><span class="row" style="flex-wrap:nowrap">${avatar(i.used_by)}<span>${esc(nameOf(i.used_by))}<br><span class="muted">Joined ${when(i.used_at)}</span></span></span><span class="muted">›</span></a>`
+      ? `<a class="item" href="#/friend/${encodeURIComponent(i.used_by)}"><span class="row" style="flex-wrap:nowrap">${avatar(i.used_by)}<span>${esc(nameOf(i.used_by))}<br><span class="muted">Joined ${when(i.used_at)}${sent(i)}</span></span></span><span class="muted">›</span></a>`
       : `<div><strong>${i.for_name ? esc(i.for_name) : 'Someone'}</strong><br><span class="muted">Joined ${when(i.used_at)}${state.people.has(i.used_by) ? ' · hasn’t finished signing up' : ''}</span></div>`).join('')}</div>` : ''}`;
   // A new account has a blank name until Welcome is finished (migration 004), so fall back to the invite's "who's it for" name.
 }
