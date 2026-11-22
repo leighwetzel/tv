@@ -311,3 +311,4 @@ html.standalone, html.standalone body { overscroll-behavior-y: none; } /* the pa
 .inv-tiles { display: flex; gap: 12px; padding-bottom: 16px; margin-bottom: 4px; border-bottom: 1px solid var(--line); }
 .inv-tile { flex: 1; background: var(--accent-tint); border-radius: var(--r-btn); padding: 12px 14px; color: var(--ink); text-decoration: none; display: flex; flex-direction: column; gap: 2px; }
 .inv-tile strong { font-size: calc(var(--base) + 8px); font-weight: 600; color: var(--accent); line-height: 1.1; }
+.muted.danger { color: var(--danger); }

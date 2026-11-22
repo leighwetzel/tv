@@ -430,7 +430,7 @@ const HELP = [
   ['People', 'in', [
     ['How do I follow someone?', 'Tap their name on any review, then tap <b>+ Follow</b>.'],
     ['Everyone or Following?', '<b>Everyone</b> shows picks from everyone on TV Rex. <b>Following</b> shows only people you follow, plus your own.'],
-    ['How do I invite someone?', 'Go to <b>Me</b>, open <b>Invites</b>, then tap <b>Send link</b>. Your link works for anyone, so you can send it to as many people as you like, or put it in a group chat. Add their name first and <b>My invites</b> shows who you sent it to.'],
+    ['How do I invite someone?', 'Go to <b>Me</b>, open <b>Invites</b>, type the person’s name, then tap <b>Send link</b>. Make a new link for each person. <b>Pending</b> shows who hasn’t joined yet, and <b>Send</b> there sends their link again.'],
     ['Who can see my picks?', 'Everyone who joined TV Rex by invite can see your name and reviews. Your email, your streaming services and My list stay private.'],
   ]],
   ['Tips', 'both', [
@@ -1325,16 +1325,21 @@ actions.saveName = async () => {
 const inviteUrl = (code) => `${location.origin}${location.pathname}?invite=${code}`;
 function personalLink(code) {
   state.myLink = code;
-  return `<div class="field"><p>Your invite link works for anyone, as often as you like. Text it, email it, or drop it in a group chat.</p>
-    <label for="inviteFor">Who are you sending it to? (optional)</label>
+  return `<div class="field"><label for="inviteFor">Who are you sending it to?</label>
     <input id="inviteFor" maxlength="80" autocomplete="off" placeholder="Their name">
-    <p class="muted small">Only you see this, on My invites.</p>
+    <p class="muted small" id="inviteForNote">Make a link for each person, so you can see who joined. Only you see the name.</p>
     <button class="primary big" data-act="sendLink">Send link</button></div>`;
 }
 // A name makes its own link; no name uses your personal one.
 async function linkFor() {
-  const forName = document.getElementById('inviteFor')?.value.trim() || '';
-  if (!forName) return { url: inviteUrl(state.myLink) };
+  const input = document.getElementById('inviteFor');
+  const forName = input?.value.trim() || '';
+  if (!forName) { // one link per person, with their name (Nov 22)
+    const note = document.getElementById('inviteForNote');
+    if (note) { note.textContent = 'Add their name first.'; note.classList.add('danger'); }
+    input?.focus();
+    return { missing: true };
+  }
   const { data, error } = await sb.rpc('make_invite_link', { p_for: forName });
   if (error || !data) { console.error('make_invite_link', error); return { error: true }; }
   return { url: inviteUrl(data), forName };
@@ -1342,17 +1347,18 @@ async function linkFor() {
 // Sharing right after a network call can be refused on iPhone; then show the link with its own Send button.
 function linkReady(url, forName) {
   document.getElementById('inviteBox').innerHTML = `<div class="field">
-    <p><strong>Link for ${esc(forName)} is ready.</strong> It works for anyone they pass it to, too.</p>
+    <p><strong>Link for ${esc(forName)} is ready.</strong></p>
     <input readonly value="${esc(url)}" id="inviteUrl" aria-label="Invite link">
     <button class="primary big" data-act="shareInvite">Send link</button>
     <button class="big" data-act="copyInvite">Copy link</button>
-    <button class="link" data-act="newLink">Send to someone else</button></div>`;
+    <button class="link" data-act="newLink">Invite someone else</button></div>`;
 }
 const shareText = () => state.me.is_host ? 'I made this app to share TV recommendations with friends:' : 'Let’s share what we’re watching on TV Rex:';
 actions.sendLink = async (d, el) => {
   el.disabled = true;
-  const { url, forName, error } = await linkFor();
+  const { url, forName, error, missing } = await linkFor();
   el.disabled = false;
+  if (missing) return;
   if (error) return toast('Couldn’t make a link. Check your connection and try again.');
   if (forName) linkReady(url, forName);
   if (!navigator.share) return forName ? null : copyText(url);
