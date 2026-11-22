@@ -1136,7 +1136,7 @@ async function viewMe() {
         </div>`)}
       <a class="item me-link" href="#/friend/${state.me.id}">${ME_ICONS.picks}<span class="me-label">My ratings</span><span class="muted me-sum" id="mePicksSum"></span><span class="muted">›</span></a>
       ${meRow('meSvc', 'services', 'My services', `<p class="muted">Used for the My services filter and highlights.</p><div class="row" id="svc">${state.services ? serviceChips('toggleMySvc') : '<span class="muted">Loading…</span>'}</div>`)}
-      ${meRow('meInv', 'invite', 'Invites', `<div id="inviteBox"></div><div id="meInvLink"></div>`, ' hidden')}
+      ${meRow('meInv', 'invite', 'Invites', `<div id="meInvLink"></div><div id="inviteBox"></div>`, ' hidden')}
       <a class="item me-link" href="#/following">${ME_ICONS.following}<span class="me-label">Following</span><span class="muted me-sum">${state.following.size} ${state.following.size === 1 ? 'person' : 'people'}</span><span class="muted">›</span></a>
       <div class="item me-link" id="meFace" hidden></div>
       <div class="item me-link">${ME_ICONS.email}<span class="me-label">Weekly email <span class="muted">(Sundays)</span></span><button class="chip ${state.me.weekly_email ? 'on' : ''}" data-act="toggleEmail">${state.me.weekly_email ? 'On' : 'Off'}</button></div>
@@ -1184,7 +1184,8 @@ async function viewMe() {
     if (n('pending') || n('joined')) {
       set('meInvSum', inviteCounts(myInvites));
       // Pending and Joined as their own rows (Nov 18), each opening just that list.
-      set('meInvLink', `<div class="list">${['pending', 'joined'].filter(n).map((k) => `<a class="item" href="#/invites/${k}"><span>${k === 'pending' ? 'Pending' : 'Joined'}</span><span class="muted">${n(k)} ›</span></a>`).join('')}</div>`);
+      // Pending and Joined as tiles above the send form (Nov 22), so they don't get lost under the buttons.
+      set('meInvLink', `<div class="inv-tiles">${['pending', 'joined'].map((k) => `<a class="inv-tile" href="#/invites/${k}"><strong>${n(k)}</strong><span>${k === 'pending' ? 'Pending' : 'Joined'} ›</span></a>`).join('')}</div>`);
     }
   }
   if (!keysErr) {
@@ -1328,8 +1329,7 @@ function personalLink(code) {
     <label for="inviteFor">Who are you sending it to? (optional)</label>
     <input id="inviteFor" maxlength="80" autocomplete="off" placeholder="Their name">
     <p class="muted small">Only you see this, on My invites.</p>
-    <button class="primary big" data-act="sendLink">Send link</button>
-    <button class="big" data-act="copyLink">Copy link</button></div>`;
+    <button class="primary big" data-act="sendLink">Send link</button></div>`;
 }
 // A name makes its own link; no name uses your personal one.
 async function linkFor() {

@@ -306,3 +306,8 @@ html.standalone, html.standalone body { overscroll-behavior-y: none; } /* the pa
 .search-wrap input::-webkit-search-cancel-button { -webkit-appearance: none; appearance: none; }
 .search-clear { position: absolute; top: 50%; right: 2px; transform: translateY(-50%); width: 44px; height: 44px; min-height: 44px; padding: 0; display: flex; align-items: center; justify-content: center; border: 0; background: transparent; color: var(--muted); border-radius: var(--r-small); }
 .search-clear[hidden] { display: none; }
+
+/* Me > Invites: Pending and Joined tiles above the send form (Nov 22). */
+.inv-tiles { display: flex; gap: 12px; padding-bottom: 16px; margin-bottom: 4px; border-bottom: 1px solid var(--line); }
+.inv-tile { flex: 1; background: var(--accent-tint); border-radius: var(--r-btn); padding: 12px 14px; color: var(--ink); text-decoration: none; display: flex; flex-direction: column; gap: 2px; }
+.inv-tile strong { font-size: calc(var(--base) + 8px); font-weight: 600; color: var(--accent); line-height: 1.1; }
