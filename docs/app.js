@@ -1560,6 +1560,14 @@ function expiresIn(ts) {
 }
 // Open links can be removed (migration 016).
 const removeBtn = (i, live) => `<button class="small" data-act="removeInvite" data-code="${esc(i.code)}" data-named="${i.named ? 1 : ''}" data-live="${live ? 1 : ''}" aria-label="Remove ${i.for_name ? 'link for ' + esc(i.for_name) : 'this link'}">Remove</button>`;
+// Send a pending link again (Nov 22): the share menu, or copy where there isn't one.
+const resendBtn = (i) => `<button class="small primary" data-act="resendInvite" data-code="${esc(i.code)}" aria-label="Send ${i.for_name ? 'link for ' + esc(i.for_name) : 'this link'} again">Send</button>`;
+actions.resendInvite = async (d) => {
+  const url = inviteUrl(d.code);
+  if (!navigator.share) return copyText(url);
+  const text = shareText();
+  await navigator.share({ title: text.slice(0, -1), text, url }).catch(() => {});
+};
 actions.removeInvite = async (d, el) => {
   if (d.live && !confirm('Remove this link? It will stop working.')) return;
   el.disabled = true;
@@ -1584,7 +1592,7 @@ async function viewInvites(group) {
     <a href="#/me">← Me</a>
     <div><h1>${title}</h1>${group === 'joined' ? '' : '<span class="muted">Pending shows links you sent with a name. Remove one to turn it off.</span>'}</div>
     ${pending.length || joined.length ? '' : `<p class="empty">${group === 'pending' ? 'No pending invites.' : group === 'joined' ? 'No one has joined yet.' : 'No invites yet. Send your link from Me.'}</p>`}
-    ${pending.length ? `${group ? '' : '<h2>Pending</h2>'}<div class="list">${pending.map((i) => `<div class="spread"><span><strong>${forLine(i)}</strong><br><span class="muted">${pendLine(i)}</span></span>${removeBtn(i, true)}</div>`).join('')}</div>` : ''}
+    ${pending.length ? `${group ? '' : '<h2>Pending</h2>'}<div class="list">${pending.map((i) => `<div class="spread"><span><strong>${forLine(i)}</strong><br><span class="muted">${pendLine(i)}</span></span><span class="row" style="flex-wrap:nowrap">${resendBtn(i)}${removeBtn(i, true)}</span></div>`).join('')}</div>` : ''}
     ${joined.length ? `${group ? '' : '<h2>Joined</h2>'}<div class="list">${joined.map((i) => state.people.get(i.used_by)?.name
       ? `<a class="item" href="#/friend/${encodeURIComponent(i.used_by)}"><span class="row" style="flex-wrap:nowrap">${avatar(i.used_by)}<span>${esc(nameOf(i.used_by))}<br><span class="muted">Joined ${when(i.used_at)}${sent(i)}</span></span></span><span class="muted">›</span></a>`
       : `<div><strong>${i.for_name ? esc(i.for_name) : 'Someone'}</strong><br><span class="muted">Joined ${when(i.used_at)}${state.people.has(i.used_by) ? ' · hasn’t finished signing up' : ''}</span></div>`).join('')}</div>` : ''}`;
