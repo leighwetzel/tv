@@ -417,7 +417,7 @@ const HELP = [
     ['How do I sign in with Face ID?', 'After you sign in with a code, TV Rex asks if you’d like to use Face ID. Tap <b>Yes</b>. Missed it? Once you’re in, go to <b>Me</b> and tap <b>Turn on</b> next to Sign in with Face ID. Next time, tap <b>Sign in with Face ID</b> and look at your phone.'],
     ['Why do I have to sign in again?', 'Safari forgets sign-ins for websites you haven’t opened in a week. Turn on Face ID and signing back in takes one look.'],
     ['I don’t have an invite', 'TV Rex is invite-only. If you know someone on it, ask them for a link, or <a href="#/request">request an invite</a> and we’ll email you one.'],
-    ['My invite link says it’s used or expired', 'Each invite link works once, for one person, for 7 days. Ask the person who invited you for a new link.'],
+    ['My invite link says it’s used or expired', 'Some older invite links worked once, for one person, for 7 days. Ask the person who invited you to send their invite link again.'],
   ]],
   ['Using TV Rex', 'in', [
     ['How do I add something I watched?', 'Tap <b>Search</b> at the bottom. Type the name, tap the right show or movie, pick a rating, and add a note if you like.'],
@@ -430,7 +430,7 @@ const HELP = [
   ['People', 'in', [
     ['How do I follow someone?', 'Tap their name on any review, then tap <b>+ Follow</b>.'],
     ['Everyone or Following?', '<b>Everyone</b> shows picks from everyone on TV Rex. <b>Following</b> shows only people you follow, plus your own.'],
-    ['How do I invite someone?', 'Go to <b>Me</b>, tap <b>Invite someone</b>, then <b>Send link</b>. Each link is for one person only. For another person, tap <b>New link</b>.'],
+    ['How do I invite someone?', 'Go to <b>Me</b>, open <b>Invites</b>, then tap <b>Send link</b>. Your link works for anyone, so you can send it to as many people as you like, or put it in a group chat.'],
     ['Who can see my picks?', 'Everyone who joined TV Rex by invite can see your name and reviews. Your email, your streaming services and My list stay private.'],
   ]],
   ['Tips', 'both', [
@@ -462,8 +462,8 @@ async function viewInvite() {
   if (state.session || !localStorage.getItem('tv_invite')) return route(); // signed in meanwhile
   const inv = data ?? {};
   const name = inv.name;
-  const dead = { used: 'This invite link has already been used. Each link works for one person.',
-    expired: 'This invite link has expired. Links work for 7 days.',
+  const dead = { used: 'This invite link has already been used.',
+    expired: 'This invite link has expired.',
     invalid: 'This invite link doesn’t work.' }[inv.status];
   const icon = (paths) => `<span class="why-icon" aria-hidden="true"><svg viewBox="0 0 24 24" width="26" height="26" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">${paths}</svg></span>`;
   const why = (svg, title, text) => `<div class="why">${icon(svg)}<div><h3>${title}</h3><p class="muted">${text}</p></div></div>`;
@@ -509,8 +509,8 @@ async function viewInvite() {
 // ---------------------------------------------------------------- not a member
 // Signed in without an invite: the database shows them nothing, so say why.
 function viewNotMember() {
-  const why = { used: 'That invite link has already been used. Each link works for one person.',
-    expired: 'That invite link has expired. Links work for 7 days.',
+  const why = { used: 'That invite link has already been used.',
+    expired: 'That invite link has expired.',
     invalid: 'That invite link doesn’t work.' }[state.inviteProblem];
   $app.innerHTML = `${BRAND}
     <h2>TV Rex is invite-only</h2>
@@ -1136,7 +1136,7 @@ async function viewMe() {
         </div>`)}
       <a class="item me-link" href="#/friend/${state.me.id}">${ME_ICONS.picks}<span class="me-label">My ratings</span><span class="muted me-sum" id="mePicksSum"></span><span class="muted">›</span></a>
       ${meRow('meSvc', 'services', 'My services', `<p class="muted">Used for the My services filter and highlights.</p><div class="row" id="svc">${state.services ? serviceChips('toggleMySvc') : '<span class="muted">Loading…</span>'}</div>`)}
-      ${meRow('meInv', 'invite', 'Invites', `<button class="primary big" data-act="invite">Invite someone</button><div id="inviteBox"></div><div id="meInvLink"></div>`, ' hidden')}
+      ${meRow('meInv', 'invite', 'Invites', `<div id="inviteBox"></div><div id="meInvLink"></div>`, ' hidden')}
       <a class="item me-link" href="#/following">${ME_ICONS.following}<span class="me-label">Following</span><span class="muted me-sum">${state.following.size} ${state.following.size === 1 ? 'person' : 'people'}</span><span class="muted">›</span></a>
       <div class="item me-link" id="meFace" hidden></div>
       <div class="item me-link">${ME_ICONS.email}<span class="me-label">Weekly email <span class="muted">(Sundays)</span></span><button class="chip ${state.me.weekly_email ? 'on' : ''}" data-act="toggleEmail">${state.me.weekly_email ? 'On' : 'Off'}</button></div>
@@ -1154,7 +1154,7 @@ async function viewMe() {
   if (state.services) set('meSvcSum', svcSummary());
 
   // Everything at once, so the slowest request sets the wait instead of the sum of them.
-  const [svcs, { count: nRatings }, { error: invitesClosed }, { data: keys, error: keysErr }, { data: reqs, error: reqsErr }, { data: inbox }, { data: fbs }, myInvites] = await Promise.all([
+  const [svcs, { count: nRatings }, { error: invitesClosed }, { data: keys, error: keysErr }, { data: reqs, error: reqsErr }, { data: inbox }, { data: fbs }, myInvites, { data: myLink }] = await Promise.all([
     state.services ? null : fn('services').then((r) => r.services).catch((e) => { console.error('services', e); return null; }),
     sb.from('ratings').select('title_id', { count: 'exact', head: true }).eq('user_id', state.me.id),
     sb.rpc('my_open_invites'), // missing until migration 006: then only hosts invite
@@ -1164,6 +1164,7 @@ async function viewMe() {
     sb.rpc('gets_invite_requests'), // true only for you, so the section (and any error) shows only to you
     sb.from('feedback').select('*').is('resolved_at', null).order('created_at', { ascending: false }).limit(50), // only you get rows
     loadMyInvites(),
+    sb.rpc('my_invite_link'), // missing until migration 021: then one-person links
   ]);
   if (svcs) state.services = svcs;
   if (!live()) return;
@@ -1178,6 +1179,7 @@ async function viewMe() {
 
   if (invitesClosed ? state.me.is_host : true) {
     document.getElementById('meInv').hidden = false;
+    set('inviteBox', myLink ? personalLink(myLink) : '<button class="primary big" data-act="invite">Invite someone</button>');
     const n = (k) => myInvites.filter((i) => inviteState(i) === k).length;
     if (n('pending') || n('joined')) {
       set('meInvSum', inviteCounts(myInvites));
@@ -1316,7 +1318,16 @@ actions.saveName = async () => {
   document.getElementById('myName').blur();
   toast('Name saved');
 };
-// Invite links. Each one works once, for 7 days. "Who's it for?" is optional and only you see it.
+// Your invite link (migration 021, Nov 22): one per person, works for anyone, never expires.
+// One-person links were hurting sign-ups because people didn't pass them on.
+function personalLink(code) {
+  const url = `${location.origin}${location.pathname}?invite=${code}`;
+  return `<div class="field"><p>Your invite link works for anyone you send it to, as often as you like. Text it, email it, or drop it in a group chat.</p>
+    <input readonly value="${esc(url)}" id="inviteUrl" aria-label="Your invite link">
+    <button class="primary big" data-act="shareInvite">Send link</button>
+    <button class="big" data-act="copyInvite">Copy link</button></div>`;
+}
+// Before migration 021: one-person links. Each one works once, for 7 days. "Who's it for?" is optional and only you see it.
 async function insertInvite(forName) {
   const row = { created_by: state.me.id };
   if (forName) row.for_name = forName.slice(0, 80);
