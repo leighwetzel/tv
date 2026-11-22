@@ -1327,7 +1327,7 @@ function personalLink(code) {
   state.myLink = code;
   return `<div class="field"><label for="inviteFor">Who are you sending it to?</label>
     <input id="inviteFor" maxlength="80" autocomplete="off" placeholder="Their name">
-    <p class="muted small" id="inviteForNote">Make a link for each person, so you can see who joined. Only you see the name.</p>
+    <p class="muted small" id="inviteForNote">Make a link for each person, so you can see who joined. This is also the name others see until they change it.</p>
     <button class="primary big" data-act="sendLink">Send link</button></div>`;
 }
 // A name makes its own link; no name uses your personal one.
