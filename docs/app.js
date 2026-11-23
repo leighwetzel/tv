@@ -430,7 +430,7 @@ const HELP = [
   ['People', 'in', [
     ['How do I follow someone?', 'Tap their name on any review, then tap <b>+ Follow</b>.'],
     ['Everyone or Following?', '<b>Everyone</b> shows picks from everyone on TV Rex. <b>Following</b> shows only people you follow, plus your own.'],
-    ['How do I invite someone?', 'Go to <b>Me</b>, open <b>Invites</b>, type the person’s name, then tap <b>Send link</b>. Make a new link for each person. <b>Pending</b> shows who hasn’t joined yet, and <b>Send</b> there sends their link again.'],
+    ['How do I invite someone?', 'Go to <b>Me</b>, open <b>Invites</b>, type the person’s name, then tap <b>Send link</b>. Make a new link for each person. <b>Pending</b> shows who hasn’t opened their link yet, <b>Opened</b> shows who opened it but hasn’t joined, and <b>Send</b> sends their link again.'],
     ['Who can see my picks?', 'Everyone who joined TV Rex by invite can see your name and reviews. Your email, your streaming services and My list stay private.'],
   ]],
   ['Tips', 'both', [
@@ -458,6 +458,7 @@ function viewHelp() {
 // the page still works, just without the inviter's name.
 async function viewInvite() {
   const code = localStorage.getItem('tv_invite');
+  sb.rpc('mark_invite_opened', { invite_code: code }).then(() => {}, () => {}); // My invites > Opened (migration 023)
   const { data } = await sb.rpc('invite_preview', { invite_code: code });
   if (state.session || !localStorage.getItem('tv_invite')) return route(); // signed in meanwhile
   const inv = data ?? {};
@@ -1181,11 +1182,13 @@ async function viewMe() {
     document.getElementById('meInv').hidden = false;
     set('inviteBox', myLink ? personalLink(myLink) : '<button class="primary big" data-act="invite">Invite someone</button>');
     const n = (k) => myInvites.filter((i) => inviteState(i) === k).length;
-    if (n('pending') || n('joined')) {
+    if (n('pending') || n('opened') || n('joined')) {
       set('meInvSum', inviteCounts(myInvites));
       // Pending and Joined as their own rows (Nov 18), each opening just that list.
       // Pending and Joined as tiles above the send form (Nov 22), so they don't get lost under the buttons.
-      set('meInvLink', `<div class="inv-tiles">${['pending', 'joined'].map((k) => `<a class="inv-tile" href="#/invites/${k}"><strong>${n(k)}</strong><span>${k === 'pending' ? 'Pending' : 'Joined'} ›</span></a>`).join('')}</div>`);
+      // Opened between them (Nov 23): they tapped the link but haven't joined.
+      const label = { pending: 'Pending', opened: 'Opened', joined: 'Joined' };
+      set('meInvLink', `<div class="inv-tiles">${['pending', 'opened', 'joined'].map((k) => `<a class="inv-tile" href="#/invites/${k}"><strong>${n(k)}</strong><span>${label[k]} ›</span></a>`).join('')}</div>`);
     }
   }
   if (!keysErr) {
@@ -1549,16 +1552,18 @@ async function loadMyInvites() {
   let { data, error } = await sb.from('invites').select(cols + ', via_link').eq('created_by', state.me.id).order('created_at', { ascending: false });
   if (error) ({ data } = await sb.from('invites').select(cols).eq('created_by', state.me.id).order('created_at', { ascending: false })); // before 022
   const rows = data ?? [];
-  const { data: links } = await sb.from('invite_links').select('code, for_name, created_at').eq('owner', state.me.id).not('for_name', 'is', null);
+  let { data: links, error: linksErr } = await sb.from('invite_links').select('code, for_name, created_at, opened_at').eq('owner', state.me.id).not('for_name', 'is', null);
+  if (linksErr) ({ data: links } = await sb.from('invite_links').select('code, for_name, created_at').eq('owner', state.me.id).not('for_name', 'is', null)); // before 023
   state.sentTo = new Map((links ?? []).map((l) => [l.code, l.for_name]));
   const unused = (links ?? []).filter((l) => !rows.some((r) => r.via_link === l.code)).map((l) => ({ ...l, named: true }));
   return [...unused, ...rows].sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
 }
-const inviteState = (i) => i.named ? 'pending' : i.used_by ? 'joined' : new Date(i.expires_at) > new Date() ? 'pending' : 'expired';
+// Named links: Pending until opened, then Opened (migration 023), then Joined.
+const inviteState = (i) => i.named ? (i.opened_at ? 'opened' : 'pending') : i.used_by ? 'joined' : new Date(i.expires_at) > new Date() ? 'pending' : 'expired';
 // Expired links drop off on their own (Nov 16); joined people and pending links show.
 function inviteCounts(list) {
   const n = (k) => list.filter((i) => inviteState(i) === k).length;
-  return [n('joined') ? `${n('joined')} joined` : '', n('pending') ? `${n('pending')} pending` : ''].filter(Boolean).join(' · ') || 'none pending';
+  return [n('joined') ? `${n('joined')} joined` : '', n('opened') ? `${n('opened')} opened` : '', n('pending') ? `${n('pending')} pending` : ''].filter(Boolean).join(' · ') || 'none pending';
 }
 function expiresIn(ts) {
   const days = Math.ceil((new Date(ts) - Date.now()) / 86400000);
@@ -1568,11 +1573,18 @@ function expiresIn(ts) {
 const removeBtn = (i, live) => `<button class="small" data-act="removeInvite" data-code="${esc(i.code)}" data-named="${i.named ? 1 : ''}" data-live="${live ? 1 : ''}" aria-label="Remove ${i.for_name ? 'link for ' + esc(i.for_name) : 'this link'}">Remove</button>`;
 // Send a pending link again (Nov 22): the share menu, or copy where there isn't one.
 const resendBtn = (i) => `<button class="small primary" data-act="resendInvite" data-code="${esc(i.code)}" aria-label="Send ${i.for_name ? 'link for ' + esc(i.for_name) : 'this link'} again">Send</button>`;
+// Sending it again resets Opened to Pending (Nov 23), so Opened means opened since you last sent it.
 actions.resendInvite = async (d) => {
   const url = inviteUrl(d.code);
-  if (!navigator.share) return copyText(url);
-  const text = shareText();
-  await navigator.share({ title: text.slice(0, -1), text, url }).catch(() => {});
+  let sent = true;
+  if (!navigator.share) await copyText(url);
+  else {
+    const text = shareText();
+    await navigator.share({ title: text.slice(0, -1), text, url }).catch(() => { sent = false; }); // cancelled
+  }
+  if (!sent) return;
+  const { error } = await sb.rpc('reset_invite_opened', { invite_code: d.code });
+  if (!error && /^#\/invites/.test(location.hash)) route();
 };
 actions.removeInvite = async (d, el) => {
   if (d.live && !confirm('Remove this link? It will stop working.')) return;
@@ -1589,16 +1601,19 @@ async function viewInvites(group) {
   if (list.some((i) => i.used_by && !state.people.has(i.used_by))) await loadPeople(); // someone joined since the app opened
   const of = (k) => list.filter((i) => inviteState(i) === k);
   const forLine = (i) => i.named ? `Sent to ${esc(i.for_name)}` : i.for_name ? `For ${esc(i.for_name)}` : 'Invite link';
-  const pendLine = (i) => i.named ? `Sent ${when(i.created_at)} · not joined yet` : `Made ${when(i.created_at)} · ${expiresIn(i.expires_at)}`;
+  const pendLine = (i) => i.named ? (i.opened_at ? `Opened ${when(i.opened_at)} · not joined yet` : `Sent ${when(i.created_at)} · not opened yet`) : `Made ${when(i.created_at)} · ${expiresIn(i.expires_at)}`;
   // Who you sent the link to, when that's not the name they chose.
   const sent = (i) => { const to = state.sentTo?.get(i.via_link) ?? i.for_name; return to && to !== nameOf(i.used_by) ? ` · sent to ${esc(to)}` : ''; };
-  const pending = group === 'joined' ? [] : of('pending'), joined = group === 'pending' ? [] : of('joined');
-  const title = group === 'pending' ? 'Pending invites' : group === 'joined' ? 'Joined' : 'My invites';
+  const show = (k) => !group || group === k ? of(k) : [];
+  const pending = show('pending'), opened = show('opened'), joined = show('joined');
+  const title = { pending: 'Pending invites', opened: 'Opened', joined: 'Joined' }[group] ?? 'My invites';
+  const pendRows = (list) => `<div class="list">${list.map((i) => `<div class="spread"><span><strong>${forLine(i)}</strong><br><span class="muted">${pendLine(i)}</span></span><span class="row" style="flex-wrap:nowrap">${resendBtn(i)}${removeBtn(i, true)}</span></div>`).join('')}</div>`;
   $app.innerHTML = `
     <a href="#/me">← Me</a>
-    <div><h1>${title}</h1>${group === 'joined' ? '' : '<span class="muted">Pending shows links you sent with a name. Remove one to turn it off.</span>'}</div>
-    ${pending.length || joined.length ? '' : `<p class="empty">${group === 'pending' ? 'No pending invites.' : group === 'joined' ? 'No one has joined yet.' : 'No invites yet. Send your link from Me.'}</p>`}
-    ${pending.length ? `${group ? '' : '<h2>Pending</h2>'}<div class="list">${pending.map((i) => `<div class="spread"><span><strong>${forLine(i)}</strong><br><span class="muted">${pendLine(i)}</span></span><span class="row" style="flex-wrap:nowrap">${resendBtn(i)}${removeBtn(i, true)}</span></div>`).join('')}</div>` : ''}
+    <div><h1>${title}</h1>${{ joined: '', opened: '<span class="muted">They opened your link but haven’t joined yet. Sending it again moves them back to Pending.</span>' }[group] ?? '<span class="muted">Pending shows links you sent with a name that haven’t been opened yet. Remove one to turn it off.</span>'}</div>
+    ${pending.length || opened.length || joined.length ? '' : `<p class="empty">${{ pending: 'No pending invites.', opened: 'No opened invites.', joined: 'No one has joined yet.' }[group] ?? 'No invites yet. Send your link from Me.'}</p>`}
+    ${pending.length ? `${group ? '' : '<h2>Pending</h2>'}${pendRows(pending)}` : ''}
+    ${opened.length ? `${group ? '' : '<h2>Opened</h2>'}${pendRows(opened)}` : ''}
     ${joined.length ? `${group ? '' : '<h2>Joined</h2>'}<div class="list">${joined.map((i) => state.people.get(i.used_by)?.name
       ? `<a class="item" href="#/friend/${encodeURIComponent(i.used_by)}"><span class="row" style="flex-wrap:nowrap">${avatar(i.used_by)}<span>${esc(nameOf(i.used_by))}<br><span class="muted">Joined ${when(i.used_at)}${sent(i)}</span></span></span><span class="muted">›</span></a>`
       : `<div><strong>${i.for_name ? esc(i.for_name) : 'Someone'}</strong><br><span class="muted">Joined ${when(i.used_at)}${state.people.has(i.used_by) ? ' · hasn’t finished signing up' : ''}</span></div>`).join('')}</div>` : ''}`;
